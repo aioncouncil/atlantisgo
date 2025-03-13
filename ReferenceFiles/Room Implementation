@@ -1,0 +1,1497 @@
+// src/rooms/WorldRoom.ts
+import { Room, Client, matchMaker } from 'colyseus';
+import { WorldState } from '../schemas/WorldState';
+import { Position, Player, Power, Zone } from '../schemas/GameEntities';
+import { PowerService } from '../services/power.service';
+import { ZoneService } from '../services/zone.service';
+import { PlayerService } from '../services/player.service';
+import { Logger } from '../utils/logger';
+import { Validator } from '../utils/validator';
+import { ErrorCode, GameError } from '../utils/errors';
+import { config } from '../config';
+import { Metrics } from '../utils/metrics';
+import { RateLimiter } from '../utils/rate-limiter';
+
+/**
+ * WorldRoom: The primary multiplayer room that manages the game world
+ * 
+ * This room handles:
+ * - Player movement and presence
+ * - Power spawning and capturing
+ * - Zone interactions
+ * - Real-time state synchronization
+ */
+export class WorldRoom extends Room<WorldState> {
+  // Services for data access and game logic
+  private powerService: PowerService;
+  private zoneService: ZoneService;
+  private playerService: PlayerService;
+  
+  // Utility classes
+  private logger: Logger;
+  private validator: Validator;
+  private metrics: Metrics;
+  
+  // Rate limiters for various actions
+  private movementRateLimiter: RateLimiter;
+  private actionRateLimiter: RateLimiter;
+  
+  // Room configuration
+  private readonly MAX_PLAYERS = config.rooms.world.maxPlayers;
+  private readonly PLAYER_INACTIVE_TIMEOUT = config.rooms.world.playerInactiveTimeoutMs;
+  private readonly POWER_SPAWN_INTERVAL = config.rooms.world.powerSpawnIntervalMs;
+  private readonly MAX_POWERS_PER_AREA = config.rooms.world.maxPowersPerArea;
+  private readonly VISIBILITY_RADIUS = config.rooms.world.visibilityRadiusMeters;
+  
+  // Scheduled tasks
+  private powerSpawnTask: NodeJS.Timeout | null = null;
+  private playerInactivityTask: NodeJS.Timeout | null = null;
+  private worldStateUpdateTask: NodeJS.Timeout | null = null;
+  
+  /**
+   * Constructor
+   */
+  constructor() {
+    super();
+    this.powerService = new PowerService();
+    this.zoneService = new ZoneService();
+    this.playerService = new PlayerService();
+    
+    this.logger = new Logger('WorldRoom');
+    this.validator = new Validator();
+    this.metrics = new Metrics('WorldRoom');
+    
+    this.movementRateLimiter = new RateLimiter({
+      windowMs: 1000, // 1 second
+      maxRequests: 5,  // 5 requests per second
+      message: 'Too many movement updates'
+    });
+    
+    this.actionRateLimiter = new RateLimiter({
+      windowMs: 1000, // 1 second
+      maxRequests: 3,  // 3 requests per second
+      message: 'Too many actions'
+    });
+  }
+  
+  /**
+   * Called when room is initialized
+   */
+  async onCreate(options: any) {
+    this.logger.info('Creating World Room', { options });
+    
+    // Initialize room state
+    this.setState(new WorldState());
+    
+    // Set room metadata
+    this.setMetadata({
+      name: options.name || 'Main World',
+      description: options.description || 'The main game world',
+      maxPlayers: this.MAX_PLAYERS,
+      regionId: options.regionId || 'global'
+    });
+    
+    // Enable presence features
+    this.setSimulationInterval((deltaTime) => this.update(deltaTime));
+    
+    // Configure message handlers
+    this.registerMessageHandlers();
+    
+    // Start scheduled tasks
+    this.startScheduledTasks();
+    
+    // Monitoring
+    this.metrics.gauge('players_connected', 0);
+    this.metrics.gauge('powers_active', 0);
+    this.metrics.gauge('zones_active', 0);
+    
+    this.logger.info('World Room created successfully');
+  }
+  
+  /**
+   * Register message handlers for client messages
+   */
+  private registerMessageHandlers() {
+    // Movement updates
+    this.onMessage('move', (client, message) => {
+      this.handlePlayerMovement(client, message);
+    });
+    
+    // Power interactions
+    this.onMessage('power:interact', (client, message) => {
+      this.handlePowerInteraction(client, message);
+    });
+    
+    // Power capture attempts
+    this.onMessage('power:capture', (client, message) => {
+      this.handlePowerCapture(client, message);
+    });
+    
+    // Zone interactions
+    this.onMessage('zone:enter', (client, message) => {
+      this.handleZoneEnter(client, message);
+    });
+    
+    this.onMessage('zone:leave', (client, message) => {
+      this.handleZoneLeave(client, message);
+    });
+    
+    this.onMessage('zone:action', (client, message) => {
+      this.handleZoneAction(client, message);
+    });
+    
+    // Chat messages
+    this.onMessage('chat', (client, message) => {
+      this.handleChatMessage(client, message);
+    });
+    
+    // Errors and diagnostics
+    this.onMessage('error', (client, message) => {
+      this.handleClientError(client, message);
+    });
+    
+    this.onMessage('ping', (client, message) => {
+      this.handlePing(client, message);
+    });
+  }
+  
+  /**
+   * Main update loop - called on each simulation interval
+   */
+  private update(deltaTime: number) {
+    try {
+      // Update time
+      this.state.timestamp = Date.now();
+      
+      // Update power spawns
+      this.updatePowerTimers(deltaTime);
+      
+      // Update zone activities
+      this.updateZoneActivities(deltaTime);
+      
+      // Monitor performance
+      this.metrics.timing('update_duration', performance.now() - this.state.lastUpdateTime);
+      this.state.lastUpdateTime = performance.now();
+    } catch (error) {
+      this.logger.error('Error in simulation update', { error });
+      this.metrics.increment('simulation_errors');
+    }
+  }
+  
+  /**
+   * Start scheduled background tasks
+   */
+  private startScheduledTasks() {
+    // Power spawning task
+    this.powerSpawnTask = setInterval(() => {
+      this.spawnPowers();
+    }, this.POWER_SPAWN_INTERVAL);
+    
+    // Player inactivity check
+    this.playerInactivityTask = setInterval(() => {
+      this.checkPlayerInactivity();
+    }, this.PLAYER_INACTIVE_TIMEOUT / 2);
+    
+    // Periodic world state updates (weather, time of day, events)
+    this.worldStateUpdateTask = setInterval(() => {
+      this.updateWorldState();
+    }, config.rooms.world.worldStateUpdateIntervalMs);
+  }
+  
+  /**
+   * Clean up scheduled tasks
+   */
+  private stopScheduledTasks() {
+    if (this.powerSpawnTask) {
+      clearInterval(this.powerSpawnTask);
+      this.powerSpawnTask = null;
+    }
+    
+    if (this.playerInactivityTask) {
+      clearInterval(this.playerInactivityTask);
+      this.playerInactivityTask = null;
+    }
+    
+    if (this.worldStateUpdateTask) {
+      clearInterval(this.worldStateUpdateTask);
+      this.worldStateUpdateTask = null;
+    }
+  }
+  
+  /**
+   * Called when client successfully joins the room
+   */
+  async onJoin(client: Client, options: any, auth: any) {
+    try {
+      this.logger.info('Client joining', { clientId: client.sessionId, options });
+      this.metrics.increment('client_join_attempts');
+      
+      // Validate auth token
+      const userId = await this.validateAuthToken(auth?.token);
+      if (!userId) {
+        throw new GameError(ErrorCode.UNAUTHORIZED, 'Invalid authentication token');
+      }
+      
+      // Validate join options
+      this.validator.validateJoinOptions(options);
+      
+      // Get player data
+      const playerData = await this.playerService.getPlayerData(userId);
+      if (!playerData) {
+        throw new GameError(ErrorCode.NOT_FOUND, 'Player data not found');
+      }
+      
+      // Set client attributes
+      client.userData = {
+        userId: userId,
+        username: playerData.username,
+        rank: playerData.rank,
+        powers: playerData.powers
+      };
+      
+      // Create player in room state
+      const player = new Player();
+      player.id = userId;
+      player.sessionId = client.sessionId;
+      player.username = playerData.username;
+      player.rank = playerData.rank;
+      player.avatar = playerData.avatar;
+      player.position = new Position();
+      player.position.x = options.position?.x || 0;
+      player.position.y = options.position?.y || 0;
+      player.lastActivity = Date.now();
+      
+      // Add player to room state
+      this.state.players.set(client.sessionId, player);
+      
+      // Update metrics
+      this.metrics.gauge('players_connected', this.state.players.size);
+      this.metrics.increment('client_joins_successful');
+      
+      this.logger.info('Client joined successfully', { 
+        clientId: client.sessionId, 
+        userId: userId
+      });
+      
+      // Initialize player's visible area
+      this.updatePlayerVisibleArea(client);
+      
+      // Broadcast join event
+      this.broadcast('player:joined', { 
+        id: userId, 
+        username: playerData.username,
+        position: { x: player.position.x, y: player.position.y }
+      }, { except: client });
+    } catch (error) {
+      this.logger.error('Error during client join', { 
+        clientId: client.sessionId, 
+        error 
+      });
+      
+      this.metrics.increment('client_join_errors');
+      
+      // Gracefully handle by disconnecting the client
+      client.leave(1000, error instanceof GameError ? 
+        error.message : 
+        'Error joining room');
+    }
+  }
+  
+  /**
+   * Called when a client leaves the room
+   */
+  async onLeave(client: Client, consented: boolean) {
+    try {
+      const player = this.state.players.get(client.sessionId);
+      
+      this.logger.info('Client leaving', { 
+        clientId: client.sessionId, 
+        userId: player?.id, 
+        consented 
+      });
+      
+      // Update player's last location in database for persistence
+      if (player) {
+        await this.playerService.updatePlayerLocation(player.id, {
+          x: player.position.x,
+          y: player.position.y,
+          worldId: this.roomId
+        });
+        
+        // If player was in a zone, notify zone of departure
+        if (player.currentZoneId) {
+          await this.zoneService.playerExitZone(player.id, player.currentZoneId);
+          this.broadcast('zone:playerLeft', {
+            userId: player.id,
+            zoneId: player.currentZoneId
+          });
+        }
+        
+        // Remove from room state
+        this.state.players.delete(client.sessionId);
+        
+        // Broadcast leave event to other players
+        this.broadcast('player:left', { id: player.id });
+      }
+      
+      // Update metrics
+      this.metrics.gauge('players_connected', this.state.players.size);
+      this.metrics.increment('client_leaves');
+    } catch (error) {
+      this.logger.error('Error during client leave', { 
+        clientId: client.sessionId, 
+        error 
+      });
+      this.metrics.increment('client_leave_errors');
+    }
+  }
+  
+  /**
+   * Called before room is destroyed
+   */
+  onDispose() {
+    this.logger.info('Disposing World Room');
+    
+    // Clean up scheduled tasks
+    this.stopScheduledTasks();
+    
+    // Persist important state to database
+    this.persistRoomState();
+    
+    // Final metrics
+    this.metrics.timing('room_lifetime', Date.now() - this.state.creationTime);
+    this.metrics.gauge('players_connected', 0);
+    
+    this.logger.info('World Room disposed successfully');
+  }
+  
+  /**
+   * Handle player movement updates
+   */
+  private async handlePlayerMovement(client: Client, message: any) {
+    try {
+      // Rate limiting
+      if (!this.movementRateLimiter.check(client.sessionId)) {
+        return;
+      }
+      
+      // Input validation
+      if (!this.validator.validateMovement(message)) {
+        throw new GameError(ErrorCode.INVALID_INPUT, 'Invalid movement data');
+      }
+      
+      const player = this.state.players.get(client.sessionId);
+      if (!player) {
+        throw new GameError(ErrorCode.NOT_FOUND, 'Player not found');
+      }
+      
+      // Update player position
+      player.position.x = message.x;
+      player.position.y = message.y;
+      player.lastActivity = Date.now();
+      
+      // Check if player entered or left any zones
+      await this.checkZoneInteractions(client, player, message);
+      
+      // Update what's visible to the player
+      this.updatePlayerVisibleArea(client);
+      
+      // Record movement for analytics
+      this.metrics.histogram('movement_distance', this.calculateDistance(
+        message.previousX, message.previousY, message.x, message.y
+      ));
+    } catch (error) {
+      this.logger.error('Error handling player movement', { 
+        clientId: client.sessionId, 
+        error,
+        message
+      });
+      
+      this.metrics.increment('movement_errors');
+      
+      if (error instanceof GameError) {
+        client.send('error', { 
+          code: error.code, 
+          message: error.message,
+          context: 'movement'
+        });
+      }
+    }
+  }
+  
+  /**
+   * Handle power interaction attempts
+   */
+  private async handlePowerInteraction(client: Client, message: any) {
+    try {
+      // Rate limiting
+      if (!this.actionRateLimiter.check(client.sessionId)) {
+        return;
+      }
+      
+      // Input validation
+      if (!this.validator.validatePowerInteraction(message)) {
+        throw new GameError(ErrorCode.INVALID_INPUT, 'Invalid power interaction data');
+      }
+      
+      const player = this.state.players.get(client.sessionId);
+      if (!player) {
+        throw new GameError(ErrorCode.NOT_FOUND, 'Player not found');
+      }
+      
+      // Find the power
+      const power = this.state.powers.get(message.powerId);
+      if (!power) {
+        throw new GameError(ErrorCode.NOT_FOUND, 'Power not found');
+      }
+      
+      // Check if player is close enough
+      const distance = this.calculateDistance(
+        player.position.x, player.position.y,
+        power.position.x, power.position.y
+      );
+      
+      if (distance > config.gameplay.maxPowerInteractionDistance) {
+        throw new GameError(ErrorCode.INVALID_ACTION, 'Too far from power');
+      }
+      
+      // Process the interaction
+      player.lastActivity = Date.now();
+      
+      // Send power details to client
+      client.send('power:details', {
+        id: power.id,
+        name: power.name,
+        description: power.description,
+        rarity: power.rarity,
+        type: power.type,
+        captureChallenge: power.captureChallenge
+      });
+      
+      // Metrics
+      this.metrics.increment('power_interactions');
+    } catch (error) {
+      this.logger.error('Error handling power interaction', { 
+        clientId: client.sessionId, 
+        error,
+        message
+      });
+      
+      this.metrics.increment('power_interaction_errors');
+      
+      if (error instanceof GameError) {
+        client.send('error', { 
+          code: error.code, 
+          message: error.message,
+          context: 'power_interaction'
+        });
+      }
+    }
+  }
+  
+  /**
+   * Handle power capture attempts
+   */
+  private async handlePowerCapture(client: Client, message: any) {
+    try {
+      // Rate limiting
+      if (!this.actionRateLimiter.check(client.sessionId)) {
+        return;
+      }
+      
+      // Input validation
+      if (!this.validator.validatePowerCapture(message)) {
+        throw new GameError(ErrorCode.INVALID_INPUT, 'Invalid power capture data');
+      }
+      
+      const player = this.state.players.get(client.sessionId);
+      if (!player) {
+        throw new GameError(ErrorCode.NOT_FOUND, 'Player not found');
+      }
+      
+      // Find the power
+      const power = this.state.powers.get(message.powerId);
+      if (!power) {
+        throw new GameError(ErrorCode.NOT_FOUND, 'Power not found');
+      }
+      
+      // Check if player is close enough
+      const distance = this.calculateDistance(
+        player.position.x, player.position.y,
+        power.position.x, power.position.y
+      );
+      
+      if (distance > config.gameplay.maxPowerInteractionDistance) {
+        throw new GameError(ErrorCode.INVALID_ACTION, 'Too far from power');
+      }
+      
+      // Call power service to attempt capture
+      const captureResult = await this.powerService.capturePower(
+        player.id, 
+        power.id, 
+        { 
+          boostItems: message.boostItems || [],
+          position: { x: player.position.x, y: player.position.y }
+        }
+      );
+      
+      // Process result
+      if (captureResult.success) {
+        // Remove from world state
+        this.state.powers.delete(power.id);
+        
+        // Notify all nearby players
+        this.broadcast('power:captured', {
+          powerId: power.id,
+          userId: player.id,
+          username: player.username
+        });
+        
+        // Send specific result to capturing player
+        client.send('power:captureResult', {
+          success: true,
+          power: {
+            id: power.id,
+            name: power.name,
+            rarity: power.rarity,
+            type: power.type
+          },
+          rewards: captureResult.rewards,
+          isNew: captureResult.isNew
+        });
+        
+        // Metrics
+        this.metrics.increment('power_captures_success');
+        this.metrics.increment(`power_rarity_captured_${power.rarity.toLowerCase()}`);
+      } else {
+        // Send failure to player
+        client.send('power:captureResult', {
+          success: false,
+          power: {
+            id: power.id,
+            name: power.name
+          },
+          reason: captureResult.reason
+        });
+        
+        // Metrics
+        this.metrics.increment('power_captures_failed');
+      }
+      
+      // Update player last activity
+      player.lastActivity = Date.now();
+      
+    } catch (error) {
+      this.logger.error('Error handling power capture', { 
+        clientId: client.sessionId, 
+        error,
+        message
+      });
+      
+      this.metrics.increment('power_capture_errors');
+      
+      if (error instanceof GameError) {
+        client.send('error', { 
+          code: error.code, 
+          message: error.message,
+          context: 'power_capture'
+        });
+      }
+    }
+  }
+  
+  /**
+   * Handle player entering a zone
+   */
+  private async handleZoneEnter(client: Client, message: any) {
+    try {
+      // Rate limiting
+      if (!this.actionRateLimiter.check(client.sessionId)) {
+        return;
+      }
+      
+      // Input validation
+      if (!this.validator.validateZoneAction(message)) {
+        throw new GameError(ErrorCode.INVALID_INPUT, 'Invalid zone enter data');
+      }
+      
+      const player = this.state.players.get(client.sessionId);
+      if (!player) {
+        throw new GameError(ErrorCode.NOT_FOUND, 'Player not found');
+      }
+      
+      // Find the zone
+      const zone = this.state.zones.get(message.zoneId);
+      if (!zone) {
+        throw new GameError(ErrorCode.NOT_FOUND, 'Zone not found');
+      }
+      
+      // Check if player is close enough
+      const distance = this.calculateDistance(
+        player.position.x, player.position.y,
+        zone.position.x, zone.position.y
+      );
+      
+      if (distance > config.gameplay.maxZoneInteractionDistance) {
+        throw new GameError(ErrorCode.INVALID_ACTION, 'Too far from zone');
+      }
+      
+      // Process zone entry
+      const entryResult = await this.zoneService.playerEnterZone(
+        player.id, 
+        zone.id
+      );
+      
+      if (entryResult.success) {
+        // Update player state
+        player.currentZoneId = zone.id;
+        player.lastActivity = Date.now();
+        
+        // Update zone state
+        zone.currentPlayers.push(player.id);
+        
+        // Broadcast to players in zone
+        this.broadcast('zone:playerEntered', {
+          zoneId: zone.id,
+          userId: player.id,
+          username: player.username
+        }, { except: client });
+        
+        // Send zone details to player
+        client.send('zone:entered', {
+          id: zone.id,
+          name: zone.name,
+          description: zone.description,
+          type: zone.type,
+          controlledBy: zone.controlledBy,
+          currentPlayers: zone.currentPlayers.length,
+          events: zone.events,
+          resources: entryResult.resources
+        });
+        
+        // Metrics
+        this.metrics.increment('zone_entries');
+      } else {
+        client.send('zone:entryDenied', {
+          zoneId: zone.id,
+          reason: entryResult.reason
+        });
+        
+        // Metrics
+        this.metrics.increment('zone_entry_denials');
+      }
+    } catch (error) {
+      this.logger.error('Error handling zone enter', { 
+        clientId: client.sessionId, 
+        error,
+        message
+      });
+      
+      this.metrics.increment('zone_enter_errors');
+      
+      if (error instanceof GameError) {
+        client.send('error', { 
+          code: error.code, 
+          message: error.message,
+          context: 'zone_enter'
+        });
+      }
+    }
+  }
+  
+  /**
+   * Handle player leaving a zone
+   */
+  private async handleZoneLeave(client: Client, message: any) {
+    // Implementation similar to handleZoneEnter
+    // ...
+  }
+  
+  /**
+   * Handle actions performed in a zone
+   */
+  private async handleZoneAction(client: Client, message: any) {
+    // Implementation for zone actions
+    // ...
+  }
+  
+  /**
+   * Handle chat messages
+   */
+  private async handleChatMessage(client: Client, message: any) {
+    try {
+      // Rate limiting for chat
+      if (!this.actionRateLimiter.check(client.sessionId)) {
+        return;
+      }
+      
+      // Validate message
+      if (!this.validator.validateChatMessage(message)) {
+        throw new GameError(ErrorCode.INVALID_INPUT, 'Invalid chat message');
+      }
+      
+      const player = this.state.players.get(client.sessionId);
+      if (!player) {
+        throw new GameError(ErrorCode.NOT_FOUND, 'Player not found');
+      }
+      
+      // Content moderation
+      const moderatedContent = await this.moderateContent(message.content);
+      if (!moderatedContent) {
+        throw new GameError(ErrorCode.CONTENT_REJECTED, 'Message failed content moderation');
+      }
+      
+      // Determine recipients based on scope
+      let recipients: Client[] = [];
+      
+      switch (message.scope) {
+        case 'global':
+          // Check if player has global chat permission
+          if (!this.playerHasPermission(player, 'chat.global')) {
+            throw new GameError(ErrorCode.UNAUTHORIZED, 'No permission for global chat');
+          }
+          recipients = this.clients;
+          break;
+        
+        case 'zone':
+          // Check if player is in a zone
+          if (!player.currentZoneId) {
+            throw new GameError(ErrorCode.INVALID_STATE, 'Not in a zone');
+          }
+          
+          // Get all clients with players in the same zone
+          recipients = this.getClientsInZone(player.currentZoneId);
+          break;
+        
+        case 'proximity':
+          // Get clients with players in proximity
+          recipients = this.getClientsInProximity(
+            player.position.x, 
+            player.position.y, 
+            config.gameplay.chatProximityRadius
+          );
+          break;
+        
+        case 'private':
+          // Validate target exists
+          if (!message.targetId) {
+            throw new GameError(ErrorCode.INVALID_INPUT, 'Missing target ID for private message');
+          }
+          
+          const targetClient = this.getClientByUserId(message.targetId);
+          if (!targetClient) {
+            throw new GameError(ErrorCode.NOT_FOUND, 'Target player not found');
+          }
+          
+          recipients = [targetClient];
+          break;
+        
+        default:
+          throw new GameError(ErrorCode.INVALID_INPUT, 'Invalid chat scope');
+      }
+      
+      // Broadcast the message to recipients
+      const chatPayload = {
+        id: this.generateUniqueId(),
+        sender: {
+          id: player.id,
+          username: player.username,
+          rank: player.rank
+        },
+        content: moderatedContent,
+        scope: message.scope,
+        timestamp: Date.now()
+      };
+      
+      // Add target info for private messages
+      if (message.scope === 'private' && message.targetId) {
+        const targetPlayer = this.getPlayerByUserId(message.targetId);
+        if (targetPlayer) {
+          chatPayload.target = {
+            id: targetPlayer.id,
+            username: targetPlayer.username
+          };
+        }
+      }
+      
+      recipients.forEach(recipient => {
+        recipient.send('chat:message', chatPayload);
+      });
+      
+      // Track chat metrics
+      this.metrics.increment('chat_messages');
+      this.metrics.increment(`chat_scope_${message.scope}`);
+      
+    } catch (error) {
+      this.logger.error('Error handling chat message', { 
+        clientId: client.sessionId, 
+        error,
+        messageType: message?.scope
+      });
+      
+      this.metrics.increment('chat_errors');
+      
+      if (error instanceof GameError) {
+        client.send('error', { 
+          code: error.code, 
+          message: error.message,
+          context: 'chat'
+        });
+      }
+    }
+  }
+  
+  /**
+   * Handle client-reported errors
+   */
+  private handleClientError(client: Client, message: any) {
+    this.logger.warn('Client reported error', {
+      clientId: client.sessionId,
+      userId: this.state.players.get(client.sessionId)?.id,
+      error: message
+    });
+    
+    this.metrics.increment('client_reported_errors');
+  }
+  
+  /**
+   * Handle ping messages for latency measurement
+   */
+  private handlePing(client: Client, message: any) {
+    // Immediately respond with the same timestamp
+    client.send('pong', { 
+      clientSentTime: message.timestamp,
+      serverTime: Date.now()
+    });
+  }
+  
+  /* ===== Utility methods ===== */
+  
+  /**
+   * Calculate distance between two points
+   */
+  private calculateDistance(x1: number, y1: number, x2: number, y2: number): number {
+    return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+  }
+  
+  /**
+   * Validate authentication token
+   */
+  private async validateAuthToken(token: string): Promise<string | null> {
+    try {
+      // In a real implementation, this would verify the token with Auth service
+      // For now, we'll simulate a successful validation
+      if (!token) return null;
+      
+      // Parse JWT and extract user ID
+      const userId = "simulated-user-id"; // In real implementation, extract from token
+      return userId;
+    } catch (error) {
+      this.logger.error('Token validation error', { error });
+      return null;
+    }
+  }
+  
+  /**
+   * Moderate content for chat messages
+   */
+  private async moderateContent(content: string): Promise<string | null> {
+    // In a real implementation, this would call a moderation service
+    // For now, we'll do a simple check
+    if (content.length > 500) {
+      return content.substring(0, 500) + '...';
+    }
+    
+    // Check for banned words (simplified)
+    const bannedWords = ['badword1', 'badword2', 'badword3'];
+    for (const word of bannedWords) {
+      if (content.toLowerCase().includes(word)) {
+        return null;
+      }
+    }
+    
+    return content;
+  }
+  
+  /**
+   * Check if player has a specific permission
+   */
+  private playerHasPermission(player: Player, permission: string): boolean {
+    // In a real implementation, this would check against player's permission set
+    // For now, let's use a simple rank-based permission system
+    switch (permission) {
+      case 'chat.global':
+        return player.rank >= 2;
+      default:
+        return true;
+    }
+  }
+  
+  /**
+   * Get all clients with players in a specific zone
+   */
+  private getClientsInZone(zoneId: string): Client[] {
+    const clients: Client[] = [];
+    
+    this.state.players.forEach((player, sessionId) => {
+      if (player.currentZoneId === zoneId) {
+        const client = this.clients.find(c => c.sessionId === sessionId);
+        if (client) {
+          clients.push(client);
+        }
+      }
+    });
+    
+    return clients;
+  }
+  
+  /**
+   * Get all clients with players in proximity to a point
+   */
+  private getClientsInProximity(x: number, y: number, radius: number): Client[] {
+    const clients: Client[] = [];
+    
+    this.state.players.forEach((player, sessionId) => {
+      const distance = this.calculateDistance(
+        x, y,
+        player.position.x, player.position.y
+      );
+      
+      if (distance <= radius) {
+        const client = this.clients.find(c => c.sessionId === sessionId);
+        if (client) {
+          clients.push(client);
+        }
+      }
+    });
+    
+    return clients;
+  }
+  
+  /**
+   * Get client by user ID
+   */
+  private getClientByUserId(userId: string): Client | undefined {
+    let targetSessionId: string | undefined;
+    
+    this.state.players.forEach((player, sessionId) => {
+      if (player.id === userId) {
+        targetSessionId = sessionId;
+      }
+    });
+    
+    if (targetSessionId) {
+      return this.clients.find(c => c.sessionId === targetSessionId);
+    }
+    
+    return undefined;
+  }
+  
+  /**
+   * Get player by user ID
+   */
+  private getPlayerByUserId(userId: string): Player | undefined {
+    let targetPlayer: Player | undefined;
+    
+    this.state.players.forEach(player => {
+      if (player.id === userId) {
+        targetPlayer = player;
+      }
+    });
+    
+    return targetPlayer;
+  }
+  
+  /**
+   * Generate a unique ID for messages, actions, etc.
+   */
+  private generateUniqueId(): string {
+    return `${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+  }
+  
+  /**
+   * Update player's visible area
+   */
+  private updatePlayerVisibleArea(client: Client) {
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
+    
+    // Get all visible entities around player
+    const visiblePowers = this.getVisiblePowers(player);
+    const visibleZones = this.getVisibleZones(player);
+    const visiblePlayers = this.getVisiblePlayers(player);
+    
+    // Send visibility update to client
+    client.send('visibility:update', {
+      powers: visiblePowers,
+      zones: visibleZones,
+      players: visiblePlayers
+    });
+  }
+  
+  /**
+   * Get powers visible to player
+   */
+  private getVisiblePowers(player: Player): any[] {
+    const visiblePowers: any[] = [];
+    
+    this.state.powers.forEach(power => {
+      const distance = this.calculateDistance(
+        player.position.x, player.position.y,
+        power.position.x, power.position.y
+      );
+      
+      if (distance <= this.VISIBILITY_RADIUS) {
+        visiblePowers.push({
+          id: power.id,
+          position: { x: power.position.x, y: power.position.y },
+          name: power.name,
+          rarity: power.rarity,
+          type: power.type
+        });
+      }
+    });
+    
+    return visiblePowers;
+  }
+  
+  /**
+   * Get zones visible to player
+   */
+  private getVisibleZones(player: Player): any[] {
+    // Similar to getVisiblePowers
+    return [];
+  }
+  
+  /**
+   * Get players visible to player
+   */
+  private getVisiblePlayers(player: Player): any[] {
+    // Similar to getVisiblePowers
+    return [];
+  }
+  
+  /**
+   * Check for zone interactions based on player movement
+   */
+  private async checkZoneInteractions(client: Client, player: Player, movement: any) {
+    // Check if player is entering or leaving any zones
+    this.state.zones.forEach(async (zone) => {
+      const distance = this.calculateDistance(
+        player.position.x, player.position.y,
+        zone.position.x, zone.position.y
+      );
+      
+      const wasInZone = player.currentZoneId === zone.id;
+      const isInZone = distance <= zone.radius;
+      
+      // Player entered zone
+      if (!wasInZone && isInZone) {
+        // Handle zone entry
+        client.send('zone:nearby', {
+          id: zone.id,
+          name: zone.name,
+          type: zone.type,
+          distance: Math.round(distance)
+        });
+      }
+      // Player left zone
+      else if (wasInZone && !isInZone) {
+        // Handle automatic zone exit
+        await this.zoneService.playerExitZone(player.id, zone.id);
+        player.currentZoneId = undefined;
+        
+        // Update zone player list
+        const index = zone.currentPlayers.indexOf(player.id);
+        if (index !== -1) {
+          zone.currentPlayers.splice(index, 1);
+        }
+        
+        // Notify client and others
+        client.send('zone:left', { zoneId: zone.id });
+        this.broadcast('zone:playerLeft', {
+          zoneId: zone.id,
+          userId: player.id
+        }, { except: client });
+      }
+    });
+  }
+  
+  /**
+   * Spawn powers in the world
+   */
+  private async spawnPowers() {
+    try {
+      // Check if we're under the max power limit
+      if (this.state.powers.size >= this.MAX_POWERS_PER_AREA) {
+        return;
+      }
+      
+      // Determine how many powers to spawn
+      const currentPlayerCount = this.state.players.size;
+      const targetPowerCount = Math.min(
+        this.MAX_POWERS_PER_AREA,
+        Math.ceil(currentPlayerCount * config.gameplay.powersPerPlayer)
+      );
+      
+      const powersToSpawn = Math.max(0, targetPowerCount - this.state.powers.size);
+      
+      if (powersToSpawn <= 0) {
+        return;
+      }
+      
+      // Get player density areas to determine spawn locations
+      const playerDensityAreas = this.calculatePlayerDensityAreas();
+      
+      // Spawn powers
+      for (let i = 0; i < powersToSpawn; i++) {
+        // Get spawn parameters based on player density
+        const spawnLocation = this.determineSpawnLocation(playerDensityAreas);
+        
+        // Request a power from the power service
+        const powerData = await this.powerService.generatePower({
+          location: spawnLocation,
+          areaType: 'urban', // This would be based on actual location
+          timeOfDay: this.getTimeOfDay(),
+          weather: this.state.weather
+        });
+        
+        if (powerData) {
+          // Create power in world state
+          const power = new Power();
+          power.id = powerData.id;
+          power.name = powerData.name;
+          power.description = powerData.description;
+          power.rarity = powerData.rarity;
+          power.type = powerData.type;
+          power.position = new Position();
+          power.position.x = spawnLocation.x;
+          power.position.y = spawnLocation.y;
+          power.spawnTime = Date.now();
+          power.despawnTime = Date.now() + powerData.duration * 1000;
+          power.captureChallenge = powerData.captureChallenge;
+          
+          // Add to world state
+          this.state.powers.set(power.id, power);
+          
+          // Notify nearby players
+          this.notifyPlayersAboutNewPower(power);
+          
+          // Metrics
+          this.metrics.increment('powers_spawned');
+          this.metrics.increment(`power_rarity_spawned_${power.rarity.toLowerCase()}`);
+        }
+      }
+      
+      // Update metrics
+      this.metrics.gauge('powers_active', this.state.powers.size);
+      
+    } catch (error) {
+      this.logger.error('Error spawning powers', { error });
+      this.metrics.increment('power_spawn_errors');
+    }
+  }
+  
+  /**
+   * Update power timers and remove expired powers
+   */
+  private updatePowerTimers(deltaTime: number) {
+    const now = Date.now();
+    const expiredPowers: string[] = [];
+    
+    // Check for expired powers
+    this.state.powers.forEach((power, powerId) => {
+      if (power.despawnTime <= now) {
+        expiredPowers.push(powerId);
+      }
+    });
+    
+    // Remove expired powers
+    expiredPowers.forEach(powerId => {
+      const power = this.state.powers.get(powerId);
+      if (power) {
+        // Remove from state
+        this.state.powers.delete(powerId);
+        
+        // Notify nearby players
+        this.notifyPlayersAboutRemovedPower(power);
+      }
+    });
+    
+    if (expiredPowers.length > 0) {
+      this.metrics.gauge('powers_active', this.state.powers.size);
+      this.metrics.increment('powers_expired', expiredPowers.length);
+    }
+  }
+  
+  /**
+   * Update zone activities
+   */
+  private updateZoneActivities(deltaTime: number) {
+    // Update active zone events, timers, etc.
+  }
+  
+  /**
+   * Update world state (weather, time of day, events)
+   */
+  private updateWorldState() {
+    try {
+      const now = Date.now();
+      
+      // Update weather if needed
+      if (now - this.state.lastWeatherUpdate >= config.rooms.world.weatherUpdateIntervalMs) {
+        this.updateWeather();
+        this.state.lastWeatherUpdate = now;
+      }
+      
+      // Update time of day
+      this.state.timeOfDay = this.getTimeOfDay();
+      
+      // Check for scheduled events
+      this.checkForScheduledEvents();
+      
+    } catch (error) {
+      this.logger.error('Error updating world state', { error });
+      this.metrics.increment('world_state_update_errors');
+    }
+  }
+  
+  /**
+   * Update weather conditions
+   */
+  private updateWeather() {
+    // In a real implementation, this might use a weather API or simulation
+    const weatherTypes = ['Clear', 'Cloudy', 'Rainy', 'Foggy', 'Stormy'];
+    const randomIndex = Math.floor(Math.random() * weatherTypes.length);
+    
+    const oldWeather = this.state.weather;
+    this.state.weather = weatherTypes[randomIndex];
+    
+    // If weather changed, notify players
+    if (oldWeather !== this.state.weather) {
+      this.broadcast('weather:changed', { 
+        previous: oldWeather,
+        current: this.state.weather 
+      });
+      
+      this.metrics.increment('weather_changes');
+    }
+  }
+  
+  /**
+   * Get current time of day
+   */
+  private getTimeOfDay(): string {
+    // This could be more sophisticated with real-world time
+    const hour = new Date().getHours();
+    
+    if (hour >= 5 && hour < 8) return 'Dawn';
+    if (hour >= 8 && hour < 12) return 'Morning';
+    if (hour >= 12 && hour < 17) return 'Afternoon';
+    if (hour >= 17 && hour < 20) return 'Evening';
+    return 'Night';
+  }
+  
+  /**
+   * Check for scheduled events
+   */
+  private checkForScheduledEvents() {
+    // Check if any events should start or end
+    const now = Date.now();
+    
+    // Check events database or schedule
+  }
+  
+  /**
+   * Check for inactive players
+   */
+  private checkPlayerInactivity() {
+    const now = Date.now();
+    const inactiveTimeout = this.PLAYER_INACTIVE_TIMEOUT;
+    const inactivePlayers: string[] = [];
+    
+    this.state.players.forEach((player, sessionId) => {
+      if (now - player.lastActivity > inactiveTimeout) {
+        inactivePlayers.push(sessionId);
+      }
+    });
+    
+    // Disconnect inactive players
+    inactivePlayers.forEach(sessionId => {
+      const client = this.clients.find(c => c.sessionId === sessionId);
+      if (client) {
+        this.logger.info('Disconnecting inactive player', { sessionId });
+        client.leave(1000, 'Inactive for too long');
+        this.metrics.increment('inactive_disconnects');
+      }
+    });
+  }
+  
+  /**
+   * Calculate player density areas for power spawning
+   */
+  private calculatePlayerDensityAreas() {
+    // Simplified implementation - in a real game this would use
+    // more sophisticated spatial partitioning
+    const areas: any[] = [];
+    
+    // Group players by proximity
+    const processedPlayers = new Set<string>();
+    
+    this.state.players.forEach((player, sessionId) => {
+      if (processedPlayers.has(sessionId)) return;
+      
+      // Find players close to this one
+      const playersInArea: Player[] = [player];
+      processedPlayers.add(sessionId);
+      
+      this.state.players.forEach((otherPlayer, otherSessionId) => {
+        if (processedPlayers.has(otherSessionId)) return;
+        
+        const distance = this.calculateDistance(
+          player.position.x, player.position.y,
+          otherPlayer.position.x, otherPlayer.position.y
+        );
+        
+        if (distance <= config.gameplay.playerClusterRadius) {
+          playersInArea.push(otherPlayer);
+          processedPlayers.add(otherSessionId);
+        }
+      });
+      
+      // Calculate center of area
+      let sumX = 0, sumY = 0;
+      playersInArea.forEach(p => {
+        sumX += p.position.x;
+        sumY += p.position.y;
+      });
+      
+      const centerX = sumX / playersInArea.length;
+      const centerY = sumY / playersInArea.length;
+      
+      // Add to areas
+      areas.push({
+        center: { x: centerX, y: centerY },
+        playerCount: playersInArea.length,
+        radius: config.gameplay.spawnAreaRadius
+      });
+    });
+    
+    return areas;
+  }
+  
+  /**
+   * Determine spawn location for a new power
+   */
+  private determineSpawnLocation(playerDensityAreas: any[]) {
+    // Default location if no players
+    if (playerDensityAreas.length === 0) {
+      return { x: 0, y: 0 };
+    }
+    
+    // Weight areas by player count
+    const totalWeight = playerDensityAreas.reduce(
+      (sum, area) => sum + area.playerCount, 0
+    );
+    
+    let random = Math.random() * totalWeight;
+    let selectedArea = playerDensityAreas[0];
+    
+    for (const area of playerDensityAreas) {
+      random -= area.playerCount;
+      if (random <= 0) {
+        selectedArea = area;
+        break;
+      }
+    }
+    
+    // Generate random point within the area
+    const angle = Math.random() * 2 * Math.PI;
+    const distance = Math.random() * selectedArea.radius;
+    
+    const x = selectedArea.center.x + distance * Math.cos(angle);
+    const y = selectedArea.center.y + distance * Math.sin(angle);
+    
+    return { x, y };
+  }
+  
+  /**
+   * Notify nearby players about a new power
+   */
+  private notifyPlayersAboutNewPower(power: Power) {
+    this.state.players.forEach((player, sessionId) => {
+      const distance = this.calculateDistance(
+        player.position.x, player.position.y,
+        power.position.x, power.position.y
+      );
+      
+      if (distance <= this.VISIBILITY_RADIUS) {
+        const client = this.clients.find(c => c.sessionId === sessionId);
+        if (client) {
+          client.send('power:spawned', {
+            id: power.id,
+            name: power.name,
+            rarity: power.rarity,
+            type: power.type,
+            position: {
+              x: power.position.x,
+              y: power.position.y
+            },
+            distance: Math.round(distance)
+          });
+        }
+      }
+    });
+  }
+  
+  /**
+   * Notify nearby players about a removed power
+   */
+  private notifyPlayersAboutRemovedPower(power: Power) {
+    this.state.players.forEach((player, sessionId) => {
+      const distance = this.calculateDistance(
+        player.position.x, player.position.y,
+        power.position.x, power.position.y
+      );
+      
+      if (distance <= this.VISIBILITY_RADIUS) {
+        const client = this.clients.find(c => c.sessionId === sessionId);
+        if (client) {
+          client.send('power:despawned', {
+            id: power.id
+          });
+        }
+      }
+    });
+  }
+  
+  /**
+   * Persist important room state to database before disposal
+   */
+  private async persistRoomState() {
+    try {
+      // Save player locations
+      const playerUpdates = [];
+      
+      this.state.players.forEach(player => {
+        playerUpdates.push(
+          this.playerService.updatePlayerLocation(player.id, {
+            x: player.position.x,
+            y: player.position.y,
+            worldId: this.roomId
+          })
+        );
+      });
+      
+      await Promise.all(playerUpdates);
+      
+      // Save other important state
+      // ...
+      
+      this.logger.info('Room state persisted successfully');
+    } catch (error) {
+      this.logger.error('Error persisting room state', { error });
+      this.metrics.increment('state_persistence_errors');
+    }
+  }
+}

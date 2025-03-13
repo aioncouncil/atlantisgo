@@ -1,0 +1,319 @@
+# EudaimoniaGo: Virtue System Screens
+
+## Primary Screens for Virtue Interaction
+
+### 1. Virtue Dashboard (Main Stats Screen)
+- **Purpose**: Primary hub for virtue visualization and progress tracking
+- **Access Point**: Avatar icon or "profile" tab in main navigation
+- **Layout**:
+  - Concentric circle design with three rings:
+    - Outer Ring: Nine virtues (color-coded by category)
+    - Middle Ring: Three goods (Divine, Material, Mixed)
+    - Center: Overall happiness score
+  - Visual indicators for each metric:
+    - Current value as number and position on ring
+    - Optimal range shown as highlighted "target zone"
+    - Current trend (up/down arrows with percentage)
+    - Visual warning if out of optimal range
+  - Balance controls at the bottom:
+    - Present/Future slider
+    - Divine/Material balance slider
+    - Individual/Social balance slider
+  - Quick-action buttons:
+    - "Improve My Virtues" → AI recommendations
+    - "Add Custom Metric" → Custom metric creation
+    - "View History" → Timeline view of progress
+  - Tabs for switching between:
+    - Personal virtues
+    - Zone virtues (if user is in a zone)
+    - Campus virtues
+
+### 2. Custom Metric Manager
+- **Purpose**: Create and manage user-defined metrics
+- **Access Point**: From Virtue Dashboard or during onboarding
+- **Layout**:
+  - Top section: Filter by virtue category
+  - Main area: Cards for each custom metric showing:
+    - Metric name and icon
+    - Current value vs. target
+    - Progress bar
+    - Parent virtue
+    - Quick-edit button
+  - "Add New Metric" button with 4-step process:
+    1. Select parent virtue
+    2. Define metric (name, description, value type)
+    3. Set target values
+    4. Link to required arts (optional)
+  - Sorting options:
+    - By parent virtue
+    - By progress
+    - By recently updated
+    - By popularity (if public)
+  - Toggle between:
+    - My Metrics
+    - Shared Metrics (most popular user-created)
+    - Zone Metrics (metrics for user's zones)
+
+### 3. Desired Goods Manager
+- **Purpose**: Add and track goods the user wants to obtain
+- **Access Point**: From Virtue Dashboard or "Appetites" tab in navigation
+- **Layout**:
+  - Three-tab layout:
+    - Present Goods (immediate enjoyment)
+    - Future Goods (longer-term investments)
+    - Mixed Goods (balanced benefits)
+  - Each good shown as card containing:
+    - Name and description
+    - Category icon
+    - Target virtues affected (with icons)
+    - Progress bar
+    - Required arts (with mastery indicators)
+    - Quick-action buttons (practice, find experiences)
+  - "Add Desired Good" button that opens form:
+    - Name and description
+    - Category selection
+    - Virtue targets (which virtues it affects)
+    - Search for related arts
+  - Bottom section:
+    - AI recommendations based on current virtue imbalances
+    - Popular goods others are pursuing
+  - Sorting/filtering options:
+    - By priority
+    - By progress
+    - By virtue affected
+    - By art requirements
+
+### 4. Art-Virtue Connection Viewer
+- **Purpose**: Visualize how arts affect virtues
+- **Access Point**: From Art detail screen or Virtue Dashboard
+- **Layout**:
+  - Top half: Selected art with:
+    - Name and icon
+    - Current mastery level
+    - Five parts breakdown
+  - Bottom half: Virtue impact visualization:
+    - Bar chart showing contribution to each virtue
+    - Positive/negative indicators for each virtue
+    - Special indicators for significant impacts
+  - Mastery projection:
+    - Slider to see how higher mastery would affect virtues
+    - "What if I mastered this?" preview
+  - Related arts section:
+    - Complementary arts that enhance the same virtues
+    - Counterbalancing arts for negative effects
+  - Quick-action buttons:
+    - "Practice Now" → Practice screen
+    - "Find Experiences" → Related experiences
+
+### 5. Virtue Progress Timeline
+- **Purpose**: Historical view of virtue development
+- **Access Point**: From Virtue Dashboard or Profile screen
+- **Layout**:
+  - Main graph area:
+    - Line graph showing selected virtue(s) over time
+    - Togglable lines for each virtue
+    - Optimal range shown as shaded area
+  - Timeline markers for key events:
+    - Art acquisition points
+    - Experience completions
+    - Rank advancements
+    - Custom metric achievements
+  - Data view options:
+    - 1 week / 1 month / 3 months / 1 year / all time
+    - Single virtue / virtue category / all virtues
+  - Notable changes section:
+    - Most improved virtue
+    - Most declined virtue
+    - Longest sustained improvement
+  - Prediction section:
+    - Projected trends based on current activities
+    - AI recommendations to improve trends
+
+### 6. Wealth Class & Economic Access
+- **Purpose**: Show economic status and access
+- **Access Point**: From Profile or Resource screens
+- **Layout**:
+  - Top section: Current wealth class visualization
+    - Class level (1-4) with title
+    - Progress to next class
+    - Key contributing virtues
+  - Access privileges section:
+    - Available resources
+    - Zone access rights
+    - Voting rights
+    - Leadership opportunities
+  - Contributing factors:
+    - Mixed Good score with breakdown
+    - Zone rankings and contributions
+    - Honor achievements
+    - Special contributions
+  - Economic activity:
+    - Recent resource allocations
+    - Zone contributions
+    - Temple contributions
+  - Action buttons:
+    - "Improve Class" → Targeted recommendations
+    - "View Resources" → Resource inventory
+    - "Find Opportunities" → Economic experiences
+
+### 7. Virtue Balance Calibrator
+- **Purpose**: Initial setup and adjustment of virtue preferences
+- **Access Point**: During onboarding and from Settings
+- **Layout**:
+  - Balance visualization:
+    - Three interactive sliders for key balances
+    - Visual representation of current settings
+    - Descriptions of implications
+  - Virtue priority section:
+    - Distributable points across the nine virtues
+    - Visual feedback on distribution
+    - Preset templates for common archetypes
+  - Questionnaire section:
+    - Personality-quiz style questions
+    - Real-time updates to preferences based on answers
+  - Recommendations section:
+    - AI-suggested balance based on answers
+    - Explanation of recommendations
+  - Review and confirm section:
+    - Summary of all settings
+    - "Save Preferences" button
+    - "Try For a Week" option
+
+### 8. Zone Virtue Dashboard
+- **Purpose**: Zone-specific virtue visualization
+- **Access Point**: From Zone screen or Virtue Dashboard
+- **Layout**:
+  - Similar to personal Virtue Dashboard but zone-focused
+  - Top section: Zone identity and purpose
+  - Main visualization:
+    - Zone virtues in circular arrangement
+    - Comparison to optimal ranges
+    - Comparison to similar zones
+  - Contributing factors:
+    - Member contributions
+    - Zone-specific metrics
+    - Resource levels
+  - Performance indicators:
+    - Zone rank
+    - Output metrics
+    - Efficiency ratings
+  - Member section:
+    - Top contributors to each virtue
+    - Areas needing improvement
+    - Member comparisons
+  - Action buttons:
+    - "Contribute to Zone" → Zone activities
+    - "Recommend Improvements" → AI suggestions
+    - "View Zone Needs" → Backlog of zone desires
+
+## Modal and Overlay Screens
+
+### 1. Virtue Impact Preview
+- **Purpose**: Show how an action will affect virtues
+- **Trigger**: Before confirming an experience, art practice, etc.
+- **Layout**:
+  - Before/after comparison:
+    - Current virtue levels
+    - Projected virtue levels after action
+    - Difference indicators (+ or -)
+  - Balance impact:
+    - Effect on optimal ranges
+    - Warnings for imbalances
+  - Confirm/Cancel buttons
+  - "More Details" expansion for full breakdown
+
+### 2. Custom Metric Creation
+- **Purpose**: Add a new personal metric
+- **Trigger**: "Add Custom Metric" button
+- **Layout**:
+  - Step 1: Basic info
+    - Name, description, parent virtue
+  - Step 2: Value type
+    - Numeric, Range, Boolean, or Categorical
+    - Initial and target values
+  - Step 3: Verification
+    - How to measure progress
+    - Frequency of updates
+  - Step 4: Art connections
+    - Arts that can improve this metric
+    - Related experiences
+  - Preview and confirm
+
+### 3. Virtue State Notification
+- **Purpose**: Alert users to significant virtue changes
+- **Trigger**: Automatic when virtues change significantly
+- **Layout**:
+  - Top notification with:
+    - Virtue affected
+    - Change amount
+    - Cause of change
+  - Expandable for more details:
+    - Other affected virtues
+    - Recommendations to address changes
+    - Link to full Virtue Dashboard
+
+### 4. Art Capture Virtue Preview
+- **Purpose**: Show virtue benefits before capturing an art
+- **Trigger**: When viewing an uncaptured art
+- **Layout**:
+  - Art details at top
+  - Virtue contribution visualization:
+    - Bar chart showing impact on each virtue
+    - Special highlighting for significant impacts
+  - "Worth Catching?" recommendation
+  - "Capture Now" button
+  - "See Similar Arts" alternative options
+
+## Implementation Notes
+
+### User Experience Considerations
+
+1. **Progressive Disclosure**:
+   - New users see simplified virtue dashboard with just three main goods
+   - Full nine-virtue view unlocked after initial onboarding
+   - Custom metrics introduced gradually
+
+2. **Visual Consistency**:
+   - Color coding consistent across all screens:
+     - Divine Good (Justice): Blue spectrum
+     - Material Good (Beauty): Green spectrum
+     - Mixed Good (Glory): Purple spectrum
+   - Icon system for virtues consistent across app
+   - Progress indicators use same visual language
+
+3. **Contextual Help**:
+   - First-time overlay explanations for each screen
+   - Quick-access definitions for philosophical terms
+   - Dynamic tooltips for unfamiliar concepts
+   - "Learn More" links to deeper explanations
+
+4. **Personalization**:
+   - Dashboard layout adjusts based on user's focus
+   - Virtue importance reflected in size/prominence
+   - Color themes can be customized
+   - Detail level adjustable (simple → advanced)
+
+### Technical Implementation
+
+1. **Real-time Updates**:
+   - Virtue dashboards update in real-time after actions
+   - WebSocket connections for collaborative zone virtues
+   - Smooth animations for value changes
+
+2. **Performance Considerations**:
+   - Cache virtue calculations where possible
+   - Progressive loading for historical data
+   - Optimize visualizations for mobile devices
+
+3. **Offline Support**:
+   - Cache virtue data for offline viewing
+   - Queue updates for sync when connection returns
+   - Show "last updated" timestamps when offline
+
+4. **Accessibility**:
+   - Alternative text for visual representations
+   - Non-color dependent indicators
+   - Screen reader compatibility for all metrics
+   - Keyboard navigation for all screens
+
+These screens create a comprehensive, intuitive interface for the virtue system that maintains Pokémon Go's accessibility while implementing Plato's philosophical depth. The focus on visual feedback, clear progression paths, and contextual guidance makes virtue development engaging and meaningful.

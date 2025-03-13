@@ -1,0 +1,977 @@
+// RAID SYSTEM IMPLEMENTATION
+
+/**
+ * Raid Service - Core implementation of the Zone Raid system
+ * 
+ * This service handles:
+ * 1. Raid creation and scheduling
+ * 2. Participant management
+ * 3. Live raid mechanics
+ * 4. Scoring and rewards
+ * 5. Zone control transitions
+ */
+
+import { Socket } from 'socket.io';
+import { RaidModel, TeamModel, UserModel, ZoneModel } from './models';
+import { RedisClient } from './redis';
+import { NotificationService } from './notifications';
+import { ResourceService } from './resources';
+
+interface RaidParticipant {
+  userId: string;
+  teamId: string;
+  role: 'attacker' | 'defender';
+  status: 'ready' | 'active' | 'defeated';
+  position?: [number, number]; // lat, lng
+  lastAction: Date;
+  score: number;
+}
+
+interface RaidPhase {
+  name: string;
+  duration: number; // seconds
+  objectives: Array<{
+    type: string;
+    description: string;
+    points: number;
+    completed: boolean;
+  }>;
+}
+
+class RaidService {
+  private io: any; // Socket.io server instance
+  private redis: RedisClient;
+  private notifications: NotificationService;
+  private resources: ResourceService;
+  
+  // Active raids cache
+  private activeRaids: Map<string, {
+    raidId: string;
+    status: 'preparing' | 'active' | 'completed';
+    participants: Map<string, RaidParticipant>;
+    scores: {
+      attackers: number;
+      defenders: number;
+    };
+    currentPhase: number;
+    phases: RaidPhase[];
+    startTime?: Date;
+    endTime?: Date;
+    zoneId: string;
+    roomId: string;
+  }> = new Map();
+  
+  constructor(io: any, redis: RedisClient, notifications: NotificationService, resources: ResourceService) {
+    this.io = io;
+    this.redis = redis;
+    this.notifications = notifications;
+    this.resources = resources;
+    
+    // Set up socket listeners for raid actions
+    this.setupSocketListeners();
+  }
+  
+  /**
+   * Initialize socket event listeners for raid-related actions
+   */
+  private setupSocketListeners() {
+    this.io.on('connection', (socket: Socket) => {
+      // Join a raid room
+      socket.on('raid:join', async (data: { raidId: string, userId: string }) => {
+        try {
+          const { raidId, userId } = data;
+          const raid = await this.getRaid(raidId);
+          
+          if (!raid) {
+            socket.emit('raid:error', { message: 'Raid not found' });
+            return;
+          }
+          
+          // Check if user is a valid participant
+          const isParticipant = await this.validateParticipant(raidId, userId);
+          if (!isParticipant) {
+            socket.emit('raid:error', { message: 'Not authorized to join this raid' });
+            return;
+          }
+          
+          // Join the raid room
+          socket.join(`raid:${raidId}`);
+          
+          // Update participant status
+          await this.updateParticipantStatus(raidId, userId, 'ready');
+          
+          // Notify room about new participant
+          this.io.to(`raid:${raidId}`).emit('raid:playerJoined', { userId });
+          
+          // Send current raid state to the joining user
+          const raidState = this.activeRaids.get(raidId);
+          if (raidState) {
+            socket.emit('raid:state', raidState);
+          }
+        } catch (error) {
+          console.error('Error joining raid:', error);
+          socket.emit('raid:error', { message: 'Failed to join raid' });
+        }
+      });
+      
+      // Player action during raid
+      socket.on('raid:action', async (data: { 
+        raidId: string, 
+        userId: string, 
+        action: string,
+        targetId?: string,
+        position?: [number, number]
+      }) => {
+        try {
+          const { raidId, userId, action, targetId, position } = data;
+          
+          // Validate raid is active
+          const raidState = this.activeRaids.get(raidId);
+          if (!raidState || raidState.status !== 'active') {
+            socket.emit('raid:error', { message: 'Raid is not active' });
+            return;
+          }
+          
+          // Process the action
+          const result = await this.processRaidAction(raidId, userId, action, targetId, position);
+          
+          // Broadcast action result to all raid participants
+          this.io.to(`raid:${raidId}`).emit('raid:actionResult', result);
+          
+          // Check if the action completed an objective
+          this.checkObjectives(raidId);
+          
+          // Check if phase or raid is complete
+          this.checkPhaseCompletion(raidId);
+        } catch (error) {
+          console.error('Error processing raid action:', error);
+          socket.emit('raid:error', { message: 'Failed to process action' });
+        }
+      });
+      
+      // Update player position
+      socket.on('raid:updatePosition', async (data: {
+        raidId: string,
+        userId: string,
+        position: [number, number]
+      }) => {
+        try {
+          const { raidId, userId, position } = data;
+          
+          // Update player position in raid state
+          const raidState = this.activeRaids.get(raidId);
+          if (raidState && raidState.participants.has(userId)) {
+            const participant = raidState.participants.get(userId);
+            if (participant) {
+              participant.position = position;
+              participant.lastAction = new Date();
+              raidState.participants.set(userId, participant);
+              
+              // Broadcast position update to all raid participants
+              this.io.to(`raid:${raidId}`).emit('raid:positionUpdate', {
+                userId,
+                position,
+                teamId: participant.teamId,
+                role: participant.role
+              });
+            }
+          }
+        } catch (error) {
+          console.error('Error updating position:', error);
+        }
+      });
+      
+      // Leave raid
+      socket.on('raid:leave', async (data: { raidId: string, userId: string }) => {
+        try {
+          const { raidId, userId } = data;
+          
+          // Remove from raid room
+          socket.leave(`raid:${raidId}`);
+          
+          // Update participant status if raid is still preparing
+          const raidState = this.activeRaids.get(raidId);
+          if (raidState && raidState.status === 'preparing') {
+            // Handle player leaving during preparation
+            this.handlePlayerLeave(raidId, userId);
+          }
+          
+          // Notify room that player left
+          this.io.to(`raid:${raidId}`).emit('raid:playerLeft', { userId });
+        } catch (error) {
+          console.error('Error leaving raid:', error);
+        }
+      });
+    });
+  }
+  
+  /**
+   * Create a new raid
+   */
+  async createRaid(
+    attackingTeamId: string, 
+    targetZoneId: string, 
+    raidType: 'conquest' | 'resource' | 'challenge' | 'tournament',
+    scheduledTime: Date
+  ): Promise<string> {
+    try {
+      // Get zone information
+      const zone = await ZoneModel.findById(targetZoneId).exec();
+      if (!zone) {
+        throw new Error('Zone not found');
+      }
+      
+      // Get defending team
+      const defendingTeamId = zone.ownership.controlledBy;
+      if (!defendingTeamId) {
+        throw new Error('Zone does not have a controlling team');
+      }
+      
+      // Create raid phases based on type
+      const phases = this.generateRaidPhases(raidType);
+      
+      // Calculate preparation time (at least 1 hour before raid)
+      const preparationStart = new Date();
+      preparationStart.setHours(preparationStart.getHours() + 1);
+      
+      // Create raid in database
+      const raid = await RaidModel.create({
+        type: raidType,
+        status: 'Scheduled',
+        target: {
+          zoneId: targetZoneId,
+          controllingTeamId: defendingTeamId
+        },
+        attacker: {
+          teamId: attackingTeamId,
+          members: [],
+          readiness: 0
+        },
+        defender: {
+          teamId: defendingTeamId,
+          members: [],
+          defenseBonus: this.calculateDefenseBonus(zone)
+        },
+        schedule: {
+          announced: new Date(),
+          preparationStart,
+          raidStart: scheduledTime,
+          estimatedDuration: this.calculateRaidDuration(phases)
+        },
+        mechanics: {
+          format: this.getRaidFormat(raidType),
+          winCondition: this.getWinCondition(raidType),
+          phases: phases.map(p => p.name)
+        }
+      });
+      
+      // Notify both teams about upcoming raid
+      this.notifyTeamsAboutRaid(attackingTeamId, defendingTeamId, raid._id, scheduledTime);
+      
+      // Return raid ID
+      return raid._id;
+    } catch (error) {
+      console.error('Error creating raid:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Start a scheduled raid
+   */
+  async startRaid(raidId: string): Promise<boolean> {
+    try {
+      // Get raid from database
+      const raid = await RaidModel.findById(raidId).exec();
+      if (!raid || raid.status !== 'Scheduled') {
+        return false;
+      }
+      
+      // Check if both teams have members
+      if (raid.attacker.members.length === 0 || raid.defender.members.length === 0) {
+        // Auto-complete raid if one side has no members
+        await this.autoCompleteRaid(raidId);
+        return false;
+      }
+      
+      // Update raid status in database
+      raid.status = 'InProgress';
+      await raid.save();
+      
+      // Initialize raid state in memory
+      const participants = new Map<string, RaidParticipant>();
+      
+      // Add attackers
+      for (const userId of raid.attacker.members) {
+        participants.set(userId, {
+          userId,
+          teamId: raid.attacker.teamId,
+          role: 'attacker',
+          status: 'active',
+          lastAction: new Date(),
+          score: 0
+        });
+      }
+      
+      // Add defenders
+      for (const userId of raid.defender.members) {
+        participants.set(userId, {
+          userId,
+          teamId: raid.defender.teamId,
+          role: 'defender',
+          status: 'active',
+          lastAction: new Date(),
+          score: 0
+        });
+      }
+      
+      // Create raid room ID
+      const roomId = `raid:${raidId}`;
+      
+      // Generate phases
+      const phases = this.generateRaidPhases(raid.type);
+      
+      // Set up active raid in memory
+      this.activeRaids.set(raidId, {
+        raidId,
+        status: 'active',
+        participants,
+        scores: {
+          attackers: 0,
+          defenders: raid.defender.defenseBonus || 0 // Start with defense bonus
+        },
+        currentPhase: 0,
+        phases,
+        startTime: new Date(),
+        zoneId: raid.target.zoneId,
+        roomId
+      });
+      
+      // Notify all participants that raid has started
+      this.io.to(roomId).emit('raid:started', {
+        raidId,
+        zoneId: raid.target.zoneId,
+        type: raid.type,
+        currentPhase: 0,
+        phaseName: phases[0].name,
+        phaseObjectives: phases[0].objectives,
+        scores: {
+          attackers: 0,
+          defenders: raid.defender.defenseBonus || 0
+        },
+        timeRemaining: phases[0].duration
+      });
+      
+      // Start phase timer
+      this.startPhaseTimer(raidId, 0);
+      
+      return true;
+    } catch (error) {
+      console.error('Error starting raid:', error);
+      return false;
+    }
+  }
+  
+  /**
+   * Start timer for raid phase
+   */
+  private startPhaseTimer(raidId: string, phaseIndex: number) {
+    const raidState = this.activeRaids.get(raidId);
+    if (!raidState) return;
+    
+    const phase = raidState.phases[phaseIndex];
+    if (!phase) return;
+    
+    // Calculate end time
+    const endTime = new Date();
+    endTime.setSeconds(endTime.getSeconds() + phase.duration);
+    
+    // Set interval to send time updates
+    const interval = setInterval(() => {
+      const now = new Date();
+      const remaining = Math.max(0, Math.floor((endTime.getTime() - now.getTime()) / 1000));
+      
+      // Send time update to all participants
+      this.io.to(raidState.roomId).emit('raid:timeUpdate', {
+        phaseIndex,
+        phaseName: phase.name,
+        remaining
+      });
+      
+      // Check if time is up
+      if (remaining <= 0) {
+        clearInterval(interval);
+        this.endPhase(raidId, phaseIndex);
+      }
+    }, 1000);
+    
+    // Store interval reference for cleanup
+    raidState.phaseInterval = interval;
+  }
+  
+  /**
+   * End current phase and move to next, or end raid if final phase
+   */
+  private async endPhase(raidId: string, phaseIndex: number) {
+    const raidState = this.activeRaids.get(raidId);
+    if (!raidState) return;
+    
+    // Clear interval if exists
+    if (raidState.phaseInterval) {
+      clearInterval(raidState.phaseInterval);
+      delete raidState.phaseInterval;
+    }
+    
+    // Check if this was the final phase
+    if (phaseIndex >= raidState.phases.length - 1) {
+      // End the raid
+      await this.endRaid(raidId);
+      return;
+    }
+    
+    // Move to next phase
+    const nextPhaseIndex = phaseIndex + 1;
+    raidState.currentPhase = nextPhaseIndex;
+    const nextPhase = raidState.phases[nextPhaseIndex];
+    
+    // Notify participants about phase change
+    this.io.to(raidState.roomId).emit('raid:phaseChange', {
+      phaseIndex: nextPhaseIndex,
+      phaseName: nextPhase.name,
+      objectives: nextPhase.objectives,
+      duration: nextPhase.duration
+    });
+    
+    // Start timer for next phase
+    this.startPhaseTimer(raidId, nextPhaseIndex);
+  }
+  
+  /**
+   * End raid and determine winner
+   */
+  private async endRaid(raidId: string) {
+    try {
+      const raidState = this.activeRaids.get(raidId);
+      if (!raidState) return;
+      
+      // Determine winner
+      const winner = raidState.scores.attackers > raidState.scores.defenders ? 'attackers' : 'defenders';
+      
+      // Get raid from database
+      const raid = await RaidModel.findById(raidId).exec();
+      if (!raid) return;
+      
+      // Update raid status
+      raid.status = 'Completed';
+      raid.results = {
+        winner: winner === 'attackers' ? raid.attacker.teamId : raid.defender.teamId,
+        score: {
+          attacker: raidState.scores.attackers,
+          defender: raidState.scores.defenders
+        }
+      };
+      
+      // Calculate and award rewards
+      const rewards = await this.calculateAndAwardRewards(
+        raidId, 
+        winner, 
+        raid.attacker.teamId, 
+        raid.defender.teamId,
+        raidState.participants
+      );
+      
+      // If attackers won, update zone ownership
+      if (winner === 'attackers') {
+        await this.transferZoneControl(
+          raid.target.zoneId,
+          raid.attacker.teamId
+        );
+      }
+      
+      // Save raid results
+      await raid.save();
+      
+      // Notify participants about raid completion
+      this.io.to(raidState.roomId).emit('raid:completed', {
+        winner,
+        scores: {
+          attackers: raidState.scores.attackers,
+          defenders: raidState.scores.defenders
+        },
+        rewards,
+        zoneTransferred: winner === 'attackers'
+      });
+      
+      // Remove raid from active raids
+      this.activeRaids.delete(raidId);
+      
+    } catch (error) {
+      console.error('Error ending raid:', error);
+    }
+  }
+  
+  /**
+   * Process a raid action from a participant
+   */
+  private async processRaidAction(
+    raidId: string,
+    userId: string,
+    action: string,
+    targetId?: string,
+    position?: [number, number]
+  ): Promise<any> {
+    const raidState = this.activeRaids.get(raidId);
+    if (!raidState) {
+      throw new Error('Raid not found');
+    }
+    
+    // Get participant
+    const participant = raidState.participants.get(userId);
+    if (!participant || participant.status !== 'active') {
+      throw new Error('Player not active in raid');
+    }
+    
+    // Update position if provided
+    if (position) {
+      participant.position = position;
+    }
+    
+    // Update last action time
+    participant.lastAction = new Date();
+    
+    // Process different action types
+    switch (action) {
+      case 'capture':
+        return this.processCapture(raidId, participant, targetId);
+      
+      case 'defend':
+        return this.processDefend(raidId, participant, targetId);
+      
+      case 'use_power':
+        return this.usePower(raidId, participant, targetId);
+      
+      case 'attack':
+        return this.processAttack(raidId, participant, targetId);
+      
+      default:
+        throw new Error('Unknown action type');
+    }
+  }
+  
+  /**
+   * Process capture point action
+   */
+  private async processCapture(
+    raidId: string,
+    participant: RaidParticipant,
+    pointId?: string
+  ) {
+    // Validate this is a valid capture point
+    // ...implementation details...
+    
+    // Award points to team
+    this.addPoints(raidId, participant.role, 10);
+    
+    // Return result
+    return {
+      action: 'capture',
+      userId: participant.userId,
+      teamId: participant.teamId,
+      role: participant.role,
+      pointId,
+      pointsAwarded: 10,
+      message: `${participant.userId} captured point ${pointId}`
+    };
+  }
+  
+  /**
+   * Add points to team score
+   */
+  private addPoints(raidId: string, role: 'attacker' | 'defender', points: number) {
+    const raidState = this.activeRaids.get(raidId);
+    if (!raidState) return;
+    
+    if (role === 'attacker') {
+      raidState.scores.attackers += points;
+    } else {
+      raidState.scores.defenders += points;
+    }
+    
+    // Broadcast score update
+    this.io.to(raidState.roomId).emit('raid:scoreUpdate', {
+      scores: {
+        attackers: raidState.scores.attackers,
+        defenders: raidState.scores.defenders
+      }
+    });
+  }
+  
+  /**
+   * Generate raid phases based on raid type
+   */
+  private generateRaidPhases(raidType: string): RaidPhase[] {
+    switch (raidType) {
+      case 'conquest':
+        return [
+          {
+            name: 'Preparation',
+            duration: 300, // 5 minutes
+            objectives: [
+              {
+                type: 'setup',
+                description: 'Set up defenses/prepare attack',
+                points: 0,
+                completed: false
+              }
+            ]
+          },
+          {
+            name: 'First Assault',
+            duration: 600, // 10 minutes
+            objectives: [
+              {
+                type: 'capture',
+                description: 'Capture control points',
+                points: 50,
+                completed: false
+              }
+            ]
+          },
+          {
+            name: 'Reinforcement',
+            duration: 300, // 5 minutes
+            objectives: [
+              {
+                type: 'defend',
+                description: 'Hold captured territory',
+                points: 30,
+                completed: false
+              }
+            ]
+          },
+          {
+            name: 'Final Stand',
+            duration: 600, // 10 minutes
+            objectives: [
+              {
+                type: 'capture',
+                description: 'Capture main control point',
+                points: 100,
+                completed: false
+              }
+            ]
+          }
+        ];
+        
+      case 'resource':
+        return [
+          {
+            name: 'Scouting',
+            duration: 300, // 5 minutes
+            objectives: [
+              {
+                type: 'locate',
+                description: 'Locate resource caches',
+                points: 20,
+                completed: false
+              }
+            ]
+          },
+          {
+            name: 'Extraction',
+            duration: 900, // 15 minutes
+            objectives: [
+              {
+                type: 'gather',
+                description: 'Extract resources',
+                points: 50,
+                completed: false
+              }
+            ]
+          },
+          {
+            name: 'Transport',
+            duration: 600, // 10 minutes
+            objectives: [
+              {
+                type: 'transport',
+                description: 'Transport resources to safe points',
+                points: 30,
+                completed: false
+              }
+            ]
+          }
+        ];
+        
+      // Add other raid types...
+        
+      default:
+        // Default generic phases
+        return [
+          {
+            name: 'First Phase',
+            duration: 600,
+            objectives: [
+              {
+                type: 'general',
+                description: 'Complete objectives',
+                points: 50,
+                completed: false
+              }
+            ]
+          },
+          {
+            name: 'Second Phase',
+            duration: 600,
+            objectives: [
+              {
+                type: 'general',
+                description: 'Complete objectives',
+                points: 50,
+                completed: false
+              }
+            ]
+          }
+        ];
+    }
+  }
+  
+  /**
+   * Auto-complete a raid when one side has no participants
+   */
+  private async autoCompleteRaid(raidId: string) {
+    try {
+      const raid = await RaidModel.findById(raidId).exec();
+      if (!raid) return;
+      
+      // Determine winner automatically
+      const winner = raid.attacker.members.length > 0 ? 'attacker' : 'defender';
+      
+      // Update raid status
+      raid.status = 'Completed';
+      raid.results = {
+        winner: winner === 'attacker' ? raid.attacker.teamId : raid.defender.teamId,
+        score: {
+          attacker: winner === 'attacker' ? 100 : 0,
+          defender: winner === 'defender' ? 100 : 0
+        },
+        zoneChanges: winner === 'attacker' ? { newOwner: raid.attacker.teamId } : {}
+      };
+      
+      // If attackers won, update zone ownership
+      if (winner === 'attacker') {
+        await this.transferZoneControl(
+          raid.target.zoneId,
+          raid.attacker.teamId
+        );
+      }
+      
+      // Save raid results
+      await raid.save();
+      
+      // Notify teams
+      this.notifications.notifyTeam(
+        winner === 'attacker' ? raid.attacker.teamId : raid.defender.teamId,
+        'Raid Auto-Completed',
+        `Your team has won the raid on ${raid.target.zoneId} by default since the opposing team had no participants.`
+      );
+      
+    } catch (error) {
+      console.error('Error auto-completing raid:', error);
+    }
+  }
+  
+  /**
+   * Calculate and award rewards to participants
+   */
+  private async calculateAndAwardRewards(
+    raidId: string,
+    winner: 'attackers' | 'defenders',
+    attackerTeamId: string,
+    defenderTeamId: string,
+    participants: Map<string, RaidParticipant>
+  ) {
+    try {
+      // Get raid details
+      const raid = await RaidModel.findById(raidId).exec();
+      if (!raid) throw new Error('Raid not found');
+      
+      // Get zone details
+      const zone = await ZoneModel.findById(raid.target.zoneId).exec();
+      if (!zone) throw new Error('Zone not found');
+      
+      // Base rewards
+      const baseRewards = {
+        coins: 100,
+        xp: 500,
+        resources: {}
+      };
+      
+      // Winner bonus rewards
+      const winnerBonusRewards = {
+        coins: 200,
+        xp: 1000,
+        resources: {}
+      };
+      
+      // Zone-specific resource rewards
+      const zoneResources = {};
+      for (const resource of zone.resources) {
+        zoneResources[resource.type] = Math.floor(resource.quantity * 0.1); // 10% of zone resources
+      }
+      
+      // Team rewards and participant rewards record
+      const teamRewards = {
+        [attackerTeamId]: { ...baseRewards, resources: { ...zoneResources } },
+        [defenderTeamId]: { ...baseRewards, resources: { ...zoneResources } }
+      };
+      
+      // Add winner bonus
+      const winningTeamId = winner === 'attackers' ? attackerTeamId : defenderTeamId;
+      teamRewards[winningTeamId].coins += winnerBonusRewards.coins;
+      teamRewards[winningTeamId].xp += winnerBonusRewards.xp;
+      
+      // Participant rewards
+      const participantRewards = {};
+      
+      // Process each participant
+      for (const [userId, participant] of participants.entries()) {
+        const teamId = participant.teamId;
+        const isWinner = (winner === 'attackers' && participant.role === 'attacker') || 
+                         (winner === 'defenders' && participant.role === 'defender');
+        
+        // Base participant reward
+        const userReward = {
+          coins: Math.floor(teamRewards[teamId].coins / participants.size),
+          xp: Math.floor(teamRewards[teamId].xp / participants.size),
+          resources: {}
+        };
+        
+        // Add participant score bonus
+        const scoreFactor = participant.score / 100; // Normalize score
+        userReward.coins += Math.floor(userReward.coins * scoreFactor);
+        userReward.xp += Math.floor(userReward.xp * scoreFactor);
+        
+        // Personal achievement bonus
+        if (participant.score > 50) {
+          userReward.coins += 50;
+          userReward.xp += 100;
+        }
+        
+        // Record reward
+        participantRewards[userId] = userReward;
+        
+        // Award to user
+        await UserModel.findByIdAndUpdate(userId, {
+          $inc: {
+            'wallet.coins': userReward.coins,
+            'stats.raidScore': participant.score,
+            'stats.experiencesCompleted': 1
+          }
+        });
+      }
+      
+      // Award team resources
+      await TeamModel.findByIdAndUpdate(attackerTeamId, {
+        $inc: {
+          'treasury.coins': teamRewards[attackerTeamId].coins,
+          'stats.raidWins': winner === 'attackers' ? 1 : 0,
+          'stats.raidLosses': winner === 'attackers' ? 0 : 1
+        }
+      });
+      
+      await TeamModel.findByIdAndUpdate(defenderTeamId, {
+        $inc: {
+          'treasury.coins': teamRewards[defenderTeamId].coins,
+          'stats.raidWins': winner === 'defenders' ? 1 : 0,
+          'stats.raidLosses': winner === 'defenders' ? 0 : 1
+        }
+      });
+      
+      // Return reward summary
+      return {
+        teamRewards,
+        participantRewards
+      };
+      
+    } catch (error) {
+      console.error('Error calculating rewards:', error);
+      return {};
+    }
+  }
+  
+  /**
+   * Transfer zone control to new team
+   */
+  private async transferZoneControl(zoneId: string, newOwnerTeamId: string) {
+    try {
+      const zone = await ZoneModel.findById(zoneId);
+      if (!zone) return;
+      
+      // Record previous owner
+      const previousOwner = {
+        teamId: zone.ownership.controlledBy,
+        from: zone.ownership.controlledSince,
+        to: new Date()
+      };
+      
+      // Update zone ownership
+      zone.ownership.controlledBy = newOwnerTeamId;
+      zone.ownership.controlledSince = new Date();
+      zone.ownership.previousOwners.push(previousOwner);
+      
+      // Adjust zone stats for transfer
+      // ...implementation details...
+      
+      // Save zone changes
+      await zone.save();
+      
+      // Update team stats
+      await TeamModel.findByIdAndUpdate(newOwnerTeamId, {
+        $inc: { 'stats.zonesControlled': 1 }
+      });
+      
+      if (previousOwner.teamId) {
+        await TeamModel.findByIdAndUpdate(previousOwner.teamId, {
+          $inc: { 'stats.zonesControlled': -1 }
+        });
+      }
+      
+      // Notify both teams
+      this.notifications.notifyTeam(
+        newOwnerTeamId,
+        'Zone Captured',
+        `Your team has captured zone ${zone.name}!`
+      );
+      
+      if (previousOwner.teamId) {
+        this.notifications.notifyTeam(
+          previousOwner.teamId,
+          'Zone Lost',
+          `Your team has lost control of zone ${zone.name}.`
+        );
+      }
+      
+    } catch (error) {
+      console.error('Error transferring zone control:', error);
+    }
+  }
+  
+  // Additional helper methods (implementation details omitted for brevity)
+  private async getRaid(raidId: string) { /* ... */ }
+  private async validateParticipant(raidId: string, userId: string) { /* ... */ }
+  private async updateParticipantStatus(raidId: string, userId: string, status: string) { /* ... */ }
+  private async handlePlayerLeave(raidId: string, userId: string) { /* ... */ }
+  private checkObjectives(raidId: string) { /* ... */ }
+  private checkPhaseCompletion(raidId: string) { /* ... */ }
+  private calculateDefenseBonus(zone: any) { /* ... */ }
+  private calculateRaidDuration(phases: RaidPhase[]) { /* ... */ }
+  private getRaidFormat(raidType: string) { /* ... */ }
+  private getWinCondition(raidType: string) { /* ... */ }
+  private async notifyTeamsAboutRaid(attackerId: string, defenderId: string, raidId: string, time: Date) { /* ... */ }
+  private async processDefend(raidId: string, participant: RaidParticipant, targetId?: string) { /* ... */ }
+  private async usePower(raidId: string, participant: RaidParticipant, powerId?: string) { /* ... */ }
+  private async processAttack(raidId: string, participant: RaidParticipant, targetId?: string) { /* ... */ }
+}
+
+export default RaidService;

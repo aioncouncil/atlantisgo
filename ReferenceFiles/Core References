@@ -1,0 +1,21 @@
+erDiagram
+    User ||--o{ ArtMastery : "masters"
+    User ||--|| VirtueMetrics : "tracks"
+    User ||--o{ ZoneMembership : "joins"
+    User ||--o{ ExperienceInstance : "participates in"
+    
+    Art ||--o{ ArtParts : "composed of"
+    Art ||--o{ ArtMastery : "mastered as"
+    Art ||--o{ Experience : "enables"
+    
+    Experience ||--o{ ExperienceInstance : "instantiated as"
+    
+    Zone ||--o{ ZoneMembership : "includes"
+    Zone }|--|| Sector : "belongs to"
+    Zone ||--o{ ZoneActivity : "hosts"
+    Zone ||--o{ ExperienceInstance : "hosts"
+    
+    Team ||--o{ User : "includes"
+    Team ||--o{ ZoneRaid : "participates in"
+    
+    ResourceInventory ||--o{ MarketListing : "offers"

@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600">
+  <!-- Background -->
+  <rect width="800" height="600" fill="#f8f9fa" />
+  
+  <!-- Title -->
+  <text x="400" y="40" font-family="Arial, sans-serif" font-size="24" font-weight="bold" text-anchor="middle" fill="#212529">EudaimoniaGo System Architecture</text>
+  
+  <!-- Core Layer -->
+  <rect x="150" y="80" width="500" height="100" rx="10" fill="#4361ee" opacity="0.8" />
+  <text x="400" y="130" font-family="Arial, sans-serif" font-size="18" font-weight="bold" text-anchor="middle" fill="white">Core System Layer</text>
+  <text x="400" y="155" font-family="Arial, sans-serif" font-size="14" text-anchor="middle" fill="white">User System | Matrix Framework | Data Store | Authentication</text>
+  
+  <!-- Application Layer -->
+  <rect x="100" y="200" width="600" height="150" rx="10" fill="#3a86ff" opacity="0.8" />
+  <text x="400" y="220" font-family="Arial, sans-serif" font-size="18" font-weight="bold" text-anchor="middle" fill="white">Application Layer</text>
+  
+  <!-- Application Layer Components -->
+  <rect x="120" y="240" width="170" height="90" rx="5" fill="#f1faee" stroke="#457b9d" stroke-width="2" />
+  <text x="205" y="270" font-family="Arial, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#1d3557">Art System</text>
+  <text x="205" y="290" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#1d3557">Powers Collection</text>
+  <text x="205" y="310" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#1d3557">Tech Tree</text>
+  
+  <rect x="310" y="240" width="170" height="90" rx="5" fill="#f1faee" stroke="#457b9d" stroke-width="2" />
+  <text x="395" y="270" font-family="Arial, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#1d3557">Experience Engine</text>
+  <text x="395" y="290" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#1d3557">Challenges & Quests</text>
+  <text x="395" y="310" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#1d3557">Virtue Development</text>
+  
+  <rect x="500" y="240" width="170" height="90" rx="5" fill="#f1faee" stroke="#457b9d" stroke-width="2" />
+  <text x="585" y="270" font-family="Arial, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="#1d3557">Zone System</text>
+  <text x="585" y="290" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#1d3557">City Management</text>
+  <text x="585" y="310" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#1d3557">Governance</text>
+  
+  <!-- Subsystem Layer -->
+  <rect x="50" y="370" width="700" height="140" rx="10" fill="#4cc9f0" opacity="0.8" />
+  <text x="400" y="390" font-family="Arial, sans-serif" font-size="18" font-weight="bold" text-anchor="middle" fill="white">Specialized Subsystems</text>
+  
+  <!-- Subsystem Components -->
+  <rect x="70" y="410" width="130" height="80" rx="5" fill="#f1faee" stroke="#457b9d" stroke-width="2" />
+  <text x="135" y="440" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="#1d3557">Economic</text>
+  <text x="135" y="460" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#1d3557">3-Layer Market</text>
+  
+  <rect x="215" y="410" width="130" height="80" rx="5" fill="#f1faee" stroke="#457b9d" stroke-width="2" />
+  <text x="280" y="440" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="#1d3557">Social</text>
+  <text x="280" y="460" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#1d3557">Collaboration</text>
+  
+  <rect x="360" y="410" width="130" height="80" rx="5" fill="#f1faee" stroke="#457b9d" stroke-width="2" />
+  <text x="425" y="440" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="#1d3557">Innovation</text>
+  <text x="425" y="460" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#1d3557">Vitruvian Loop</text>
+  
+  <rect x="505" y="410" width="130" height="80" rx="5" fill="#f1faee" stroke="#457b9d" stroke-width="2" />
+  <text x="570" y="440" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="#1d3557">AI Guide</text>
+  <text x="570" y="460" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#1d3557">Recommendations</text>
+  
+  <rect x="650" y="410" width="80" height="80" rx="5" fill="#f1faee" stroke="#457b9d" stroke-width="2" />
+  <text x="690" y="440" font-family="Arial, sans-serif" font-size="14" font-weight="bold" text-anchor="middle" fill="#1d3557">Meta</text>
+  <text x="690" y="460" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" fill="#1d3557">Roles</text>
+  
+  <!-- Integration Layer -->
+  <rect x="150" y="530" width="500" height="50" rx="10" fill="#4895ef" opacity="0.8" />
+  <text x="400" y="560" font-family="Arial, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="white">Integration Layer: API, Mobile, Web, AR</text>
+  
+  <!-- Connecting Lines -->
+  <line x1="400" y1="180" x2="400" y2="200" stroke="#212529" stroke-width="2" />
+  <line x1="400" y1="350" x2="400" y2="370" stroke="#212529" stroke-width="2" />
+  <line x1="400" y1="510" x2="400" y2="530" stroke="#212529" stroke-width="2" />
+</svg>

@@ -1,0 +1,689 @@
+import React, { useState, useEffect } from 'react';
+import { Clock, Map, Users, Zap, Award, Target, CheckCircle, ChevronRight, PenTool, Send, Camera, Upload, User, ThumbsUp, ThumbsDown, MessageCircle } from 'lucide-react';
+
+// Sample experience data - would come from API in production
+const sampleExperience = {
+  id: 'exp123',
+  name: 'Philosophical Dialogue Challenge',
+  type: 'Challenge',
+  description: 'Engage in a structured philosophical dialogue with another player to explore a complex ethical question.',
+  difficulty: 3, // 1-5
+  duration: '30-45 minutes',
+  location: {
+    type: 'Any',
+    name: 'Participant\'s choice'
+  },
+  virtuesFocus: {
+    wisdom: 15,
+    courage: 5,
+    temperance: 10,
+    justice: 8
+  },
+  requiredPowers: [
+    {
+      id: 'p001', 
+      name: 'Dialectic Reasoning',
+      mastery: 72
+    },
+    {
+      id: 'p004',
+      name: 'Symposium Hosting',
+      mastery: 29
+    }
+  ],
+  flow: ['SoulOut', 'SoulIn', 'BodyOut', 'BodyIn'],
+  phases: [
+    {
+      name: 'PULL',
+      description: 'Select a philosophical question and find a dialogue partner',
+      duration: '5 minutes',
+      tasks: [
+        'Choose from suggested ethical questions or create your own',
+        'Find a dialogue partner (in person or remote)',
+        'Agree on basic rules of engagement'
+      ]
+    },
+    {
+      name: 'THINK',
+      description: 'Prepare your initial position and key arguments',
+      duration: '10 minutes',
+      tasks: [
+        'Research the question if needed',
+        'Formulate your initial position',
+        'Prepare key arguments and potential counterarguments',
+        'Consider relevant examples'
+      ]
+    },
+    {
+      name: 'DO',
+      description: 'Conduct the philosophical dialogue',
+      duration: '20 minutes',
+      tasks: [
+        'Present initial positions (2 minutes each)',
+        'Exchange arguments and counterarguments',
+        'Ask clarifying questions',
+        'Explore areas of agreement and disagreement',
+        'Work toward a refined understanding'
+      ]
+    },
+    {
+      name: 'REVIEW',
+      description: 'Reflect on the dialogue and what you learned',
+      duration: '10 minutes',
+      tasks: [
+        'Summarize key insights gained',
+        'Identify shifts in your understanding',
+        'Provide feedback to your dialogue partner',
+        'Document the dialogue outcome'
+      ]
+    }
+  ],
+  rewards: {
+    xp: 150,
+    coins: 50,
+    virtuePoints: 35
+  },
+  participants: [
+    {
+      id: 'user123',
+      name: 'Philosophos',
+      avatar: 'https://example.com/avatar1.jpg',
+      status: 'Host'
+    },
+    {
+      id: 'user456',
+      name: 'AristotleFan',
+      avatar: 'https://example.com/avatar2.jpg',
+      status: 'Participant'
+    }
+  ]
+};
+
+const ExperienceExecutionInterface = () => {
+  const [experience, setExperience] = useState(sampleExperience);
+  const [currentPhase, setCurrentPhase] = useState(0);
+  const [phaseProgress, setPhaseProgress] = useState({});
+  const [time, setTime] = useState({
+    elapsed: 0,
+    remaining: calculatePhaseDuration(sampleExperience.phases[0])
+  });
+  const [submissions, setSubmissions] = useState([]);
+  const [newSubmission, setNewSubmission] = useState('');
+  const [dialogueQuestion, setDialogueQuestion] = useState('');
+  const [completedTasks, setCompletedTasks] = useState({});
+  
+  // Timer effect
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTime(prev => {
+        const newElapsed = prev.elapsed + 1;
+        const newRemaining = Math.max(0, calculatePhaseDuration(experience.phases[currentPhase]) - newElapsed);
+        return { elapsed: newElapsed, remaining: newRemaining };
+      });
+    }, 1000);
+    
+    return () => clearInterval(timer);
+  }, [currentPhase, experience.phases]);
+  
+  // Calculate phase duration in seconds from string like "10 minutes"
+  function calculatePhaseDuration(phase) {
+    const durationString = phase.duration;
+    const minutes = parseInt(durationString.split(' ')[0], 10);
+    return minutes * 60;
+  }
+  
+  // Format seconds as MM:SS
+  function formatTime(seconds) {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  }
+  
+  // Toggle task completion
+  const toggleTask = (phaseIndex, taskIndex) => {
+    const key = `${phaseIndex}-${taskIndex}`;
+    setCompletedTasks(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }));
+    
+    // Update phase progress
+    const phaseTasks = experience.phases[phaseIndex].tasks.length;
+    const completedCount = Object.keys(completedTasks).filter(k => 
+      k.startsWith(`${phaseIndex}-`) && completedTasks[k]
+    ).length;
+    
+    setPhaseProgress(prev => ({
+      ...prev,
+      [phaseIndex]: Math.round((completedCount / phaseTasks) * 100)
+    }));
+  };
+  
+  // Move to next phase
+  const nextPhase = () => {
+    if (currentPhase < experience.phases.length - 1) {
+      setCurrentPhase(currentPhase + 1);
+      setTime({
+        elapsed: 0,
+        remaining: calculatePhaseDuration(experience.phases[currentPhase + 1])
+      });
+    } else {
+      // Complete experience
+      completeExperience();
+    }
+  };
+  
+  // Complete the experience
+  const completeExperience = () => {
+    // In production, this would make an API call to complete the experience
+    console.log('Experience completed!');
+    alert('Experience completed successfully! Rewards have been added to your account.');
+  };
+  
+  // Add a submission
+  const addSubmission = () => {
+    if (!newSubmission.trim()) return;
+    
+    const submission = {
+      id: `sub_${Date.now()}`,
+      userId: 'user123',
+      userName: 'Philosophos',
+      content: newSubmission,
+      type: 'text',
+      timestamp: new Date(),
+      reactions: {
+        likes: 0,
+        comments: []
+      }
+    };
+    
+    setSubmissions([...submissions, submission]);
+    setNewSubmission('');
+  };
+  
+  // Add a reaction to a submission
+  const addReaction = (submissionId, type) => {
+    setSubmissions(submissions.map(sub => 
+      sub.id === submissionId 
+        ? { 
+            ...sub, 
+            reactions: { 
+              ...sub.reactions, 
+              likes: type === 'like' ? sub.reactions.likes + 1 : sub.reactions.likes,
+              dislikes: type === 'dislike' ? (sub.reactions.dislikes || 0) + 1 : (sub.reactions.dislikes || 0)
+            } 
+          }
+        : sub
+    ));
+  };
+  
+  // Set the philosophical question
+  const setQuestion = () => {
+    if (!dialogueQuestion.trim()) return;
+    
+    const submission = {
+      id: `question_${Date.now()}`,
+      userId: 'user123',
+      userName: 'Philosophos',
+      content: `PHILOSOPHICAL QUESTION: ${dialogueQuestion}`,
+      type: 'question',
+      timestamp: new Date(),
+      reactions: {
+        likes: 0,
+        comments: []
+      }
+    };
+    
+    setSubmissions([...submissions, submission]);
+    setDialogueQuestion('');
+    
+    // Mark the first task as completed
+    toggleTask(0, 0);
+  };
+  
+  // Calculate overall progress
+  const calculateOverallProgress = () => {
+    let totalTasks = 0;
+    let completedTasksCount = 0;
+    
+    experience.phases.forEach((phase, phaseIndex) => {
+      phase.tasks.forEach((_, taskIndex) => {
+        totalTasks++;
+        const key = `${phaseIndex}-${taskIndex}`;
+        if (completedTasks[key]) {
+          completedTasksCount++;
+        }
+      });
+    });
+    
+    return Math.round((completedTasksCount / totalTasks) * 100);
+  };
+  
+  return (
+    <div className="bg-white rounded-lg shadow-lg overflow-hidden">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white p-6">
+        <div className="flex justify-between items-start">
+          <div>
+            <h1 className="text-2xl font-bold">{experience.name}</h1>
+            <div className="flex items-center mt-1">
+              <span className="text-sm bg-white/20 px-2 py-1 rounded-full mr-2">{experience.type}</span>
+              <div className="flex items-center">
+                <Target className="w-4 h-4 mr-1" />
+                <span className="text-sm">Difficulty: {Array(experience.difficulty).fill('★').join('')}</span>
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-col items-end">
+            <div className="bg-white/10 px-3 py-1 rounded-full text-sm flex items-center">
+              <Users className="w-4 h-4 mr-1" />
+              <span>{experience.participants.length} Participants</span>
+            </div>
+            <div className="text-xs mt-1 opacity-80">
+              Progress: {calculateOverallProgress()}%
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      {/* Progress Tracker */}
+      <div className="px-6 py-4 border-b">
+        <div className="flex justify-between mb-2">
+          <span className="text-sm font-medium text-gray-700">Experience Progress</span>
+          <span className="text-sm text-gray-500">{calculateOverallProgress()}%</span>
+        </div>
+        <div className="w-full bg-gray-200 rounded-full h-2">
+          <div
+            className="bg-indigo-600 h-2 rounded-full"
+            style={{ width: `${calculateOverallProgress()}%` }}
+          ></div>
+        </div>
+        <div className="flex justify-between mt-2">
+          {experience.phases.map((phase, index) => (
+            <div key={index} className="flex flex-col items-center">
+              <div 
+                className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium ${
+                  index < currentPhase 
+                    ? 'bg-green-100 text-green-800 border-2 border-green-500' 
+                    : index === currentPhase 
+                      ? 'bg-indigo-100 text-indigo-800 border-2 border-indigo-500' 
+                      : 'bg-gray-100 text-gray-800'
+                }`}
+              >
+                {index < currentPhase ? <CheckCircle className="w-4 h-4" /> : index + 1}
+              </div>
+              <span className="text-xs mt-1 text-gray-600">{phase.name}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      
+      {/* Current Phase */}
+      <div className="p-6">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-semibold text-gray-900">
+            Phase {currentPhase + 1}: {experience.phases[currentPhase].name}
+          </h2>
+          <div className="flex items-center space-x-2">
+            <div className="text-xs bg-indigo-100 text-indigo-800 px-2 py-1 rounded-full">
+              {experience.flow[currentPhase]}
+            </div>
+            <div className="text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded-full flex items-center">
+              <Clock className="w-3 h-3 mr-1" />
+              {formatTime(time.remaining)}
+            </div>
+          </div>
+        </div>
+        
+        <p className="text-gray-600 mb-4">{experience.phases[currentPhase].description}</p>
+        
+        <div className="bg-gray-50 rounded-lg p-4 mb-6">
+          <h3 className="text-md font-medium text-gray-900 mb-3">Tasks:</h3>
+          <div className="space-y-2">
+            {experience.phases[currentPhase].tasks.map((task, index) => (
+              <div key={index} className="flex items-center">
+                <input
+                  type="checkbox"
+                  id={`task-${currentPhase}-${index}`}
+                  checked={completedTasks[`${currentPhase}-${index}`] || false}
+                  onChange={() => toggleTask(currentPhase, index)}
+                  className="h-4 w-4 text-indigo-600 rounded"
+                />
+                <label
+                  htmlFor={`task-${currentPhase}-${index}`}
+                  className={`ml-2 text-sm ${
+                    completedTasks[`${currentPhase}-${index}`]
+                      ? 'text-gray-500 line-through'
+                      : 'text-gray-700'
+                  }`}
+                >
+                  {task}
+                </label>
+              </div>
+            ))}
+          </div>
+        </div>
+        
+        {/* Phase-specific content */}
+        {currentPhase === 0 && (
+          <div className="border rounded-lg p-4 mb-6">
+            <h3 className="text-md font-medium text-gray-900 mb-3">Select a Philosophical Question</h3>
+            <div className="mb-4">
+              <div className="mb-2 text-sm text-gray-700">Choose one of the suggested questions or create your own:</div>
+              <div className="space-y-2 mb-4">
+                <div className="border rounded-lg p-3 cursor-pointer hover:bg-gray-50" onClick={() => setDialogueQuestion("Is it ever ethical to lie?")}>
+                  Is it ever ethical to lie?
+                </div>
+                <div className="border rounded-lg p-3 cursor-pointer hover:bg-gray-50" onClick={() => setDialogueQuestion("Does true altruism exist, or are all actions ultimately self-serving?")}>
+                  Does true altruism exist, or are all actions ultimately self-serving?
+                </div>
+                <div className="border rounded-lg p-3 cursor-pointer hover:bg-gray-50" onClick={() => setDialogueQuestion("Is free will compatible with determinism?")}>
+                  Is free will compatible with determinism?
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={dialogueQuestion}
+                  onChange={(e) => setDialogueQuestion(e.target.value)}
+                  placeholder="Or enter your own philosophical question..."
+                  className="flex-1 px-3 py-2 border rounded-lg"
+                />
+                <button
+                  onClick={setQuestion}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg"
+                >
+                  Set Question
+                </button>
+              </div>
+            </div>
+            
+            <h3 className="text-md font-medium text-gray-900 mb-3">Find a Dialogue Partner</h3>
+            <div className="flex gap-4">
+              <button className="flex-1 px-4 py-2 bg-indigo-100 text-indigo-800 rounded-lg flex items-center justify-center">
+                <Users className="w-4 h-4 mr-2" />
+                Invite Friend
+              </button>
+              <button className="flex-1 px-4 py-2 bg-indigo-100 text-indigo-800 rounded-lg flex items-center justify-center">
+                <Map className="w-4 h-4 mr-2" />
+                Find Nearby Players
+              </button>
+            </div>
+          </div>
+        )}
+        
+        {currentPhase === 1 && (
+          <div className="border rounded-lg p-4 mb-6">
+            <h3 className="text-md font-medium text-gray-900 mb-3">Prepare Your Position</h3>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Document your initial position:
+              </label>
+              <textarea
+                rows={4}
+                placeholder="Write your initial thoughts and arguments here..."
+                className="w-full px-3 py-2 border rounded-lg"
+              ></textarea>
+            </div>
+            
+            <h3 className="text-md font-medium text-gray-900 mb-3">Research Resources</h3>
+            <div className="space-y-2 mb-4">
+              <div className="border rounded-lg p-3 flex items-center">
+                <div className="bg-indigo-100 rounded-lg p-2 mr-3">
+                  <BookIcon className="w-6 h-6 text-indigo-600" />
+                </div>
+                <div>
+                  <div className="font-medium">Plato's Republic</div>
+                  <div className="text-sm text-gray-500">Reference on justice and societal roles</div>
+                </div>
+              </div>
+              <div className="border rounded-lg p-3 flex items-center">
+                <div className="bg-indigo-100 rounded-lg p-2 mr-3">
+                  <BookIcon className="w-6 h-6 text-indigo-600" />
+                </div>
+                <div>
+                  <div className="font-medium">Aristotle's Nicomachean Ethics</div>
+                  <div className="text-sm text-gray-500">Reference on virtue ethics</div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex justify-end">
+              <button
+                onClick={() => toggleTask(1, 1)}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg"
+              >
+                Save Position
+              </button>
+            </div>
+          </div>
+        )}
+        
+        {currentPhase === 2 && (
+          <div className="border rounded-lg p-4 mb-6">
+            <h3 className="text-md font-medium text-gray-900 mb-3">Dialogue Space</h3>
+            
+            <div className="h-64 overflow-y-auto border rounded-lg p-4 mb-4 bg-gray-50">
+              {submissions.length === 0 ? (
+                <div className="text-center text-gray-500 mt-20">
+                  Your dialogue will appear here. Start by sharing your position.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {submissions.map(submission => (
+                    <div key={submission.id} className="flex">
+                      <div className="flex-shrink-0 mr-3">
+                        <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center">
+                          <User className="w-4 h-4 text-indigo-600" />
+                        </div>
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center mb-1">
+                          <span className="font-medium text-gray-900 mr-2">{submission.userName}</span>
+                          <span className="text-xs text-gray-500">
+                            {new Date(submission.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                        <div className={`p-3 rounded-lg ${submission.type === 'question' ? 'bg-amber-50 text-amber-800' : 'bg-white border'}`}>
+                          {submission.content}
+                        </div>
+                        <div className="flex mt-1 space-x-2">
+                          <button 
+                            className="text-xs flex items-center text-gray-600 hover:text-indigo-600"
+                            onClick={() => addReaction(submission.id, 'like')}
+                          >
+                            <ThumbsUp className="w-3 h-3 mr-1" />
+                            {submission.reactions.likes || 0}
+                          </button>
+                          <button 
+                            className="text-xs flex items-center text-gray-600 hover:text-indigo-600"
+                            onClick={() => addReaction(submission.id, 'dislike')}
+                          >
+                            <ThumbsDown className="w-3 h-3 mr-1" />
+                            {submission.reactions.dislikes || 0}
+                          </button>
+                          <button className="text-xs flex items-center text-gray-600 hover:text-indigo-600">
+                            <MessageCircle className="w-3 h-3 mr-1" />
+                            Reply
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newSubmission}
+                onChange={(e) => setNewSubmission(e.target.value)}
+                placeholder="Type your message..."
+                className="flex-1 px-3 py-2 border rounded-lg"
+              />
+              <button className="p-2 bg-gray-100 text-gray-700 rounded-lg">
+                <Camera className="w-5 h-5" />
+              </button>
+              <button className="p-2 bg-gray-100 text-gray-700 rounded-lg">
+                <Upload className="w-5 h-5" />
+              </button>
+              <button
+                onClick={addSubmission}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg"
+              >
+                <Send className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="mt-4 flex justify-between text-sm text-gray-600">
+              <div>Tip: Remember to ask clarifying questions to deepen the dialogue.</div>
+              <div>20 minutes remaining</div>
+            </div>
+          </div>
+        )}
+        
+        {currentPhase === 3 && (
+          <div className="border rounded-lg p-4 mb-6">
+            <h3 className="text-md font-medium text-gray-900 mb-3">Dialogue Reflection</h3>
+            
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Summarize key insights from your dialogue:
+              </label>
+              <textarea
+                rows={4}
+                placeholder="What were the most important ideas or realizations from your discussion?"
+                className="w-full px-3 py-2 border rounded-lg"
+              ></textarea>
+            </div>
+            
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                How did your understanding change through the dialogue?
+              </label>
+              <textarea
+                rows={4}
+                placeholder="Describe any shifts in your thinking or new perspectives gained..."
+                className="w-full px-3 py-2 border rounded-lg"
+              ></textarea>
+            </div>
+            
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Rate the quality of the dialogue:
+              </label>
+              <div className="flex space-x-1">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button key={star} className="text-amber-400 text-xl">
+                    ★
+                  </button>
+                ))}
+              </div>
+            </div>
+            
+            <div className="flex justify-end">
+              <button
+                onClick={() => {
+                  toggleTask(3, 0);
+                  toggleTask(3, 1);
+                }}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg"
+              >
+                Submit Reflection
+              </button>
+            </div>
+          </div>
+        )}
+        
+        {/* Required Powers */}
+        <div className="border rounded-lg p-4 mb-6">
+          <h3 className="text-md font-medium text-gray-900 mb-3">Required Powers</h3>
+          <div className="space-y-3">
+            {experience.requiredPowers.map(power => (
+              <div key={power.id} className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center mr-3">
+                    <Zap className="w-5 h-5 text-indigo-600" />
+                  </div>
+                  <div>
+                    <div className="font-medium text-gray-900">{power.name}</div>
+                    <div className="text-xs text-gray-500">Mastery: {power.mastery}%</div>
+                  </div>
+                </div>
+                <div className="w-24">
+                  <div className="w-full bg-gray-200 rounded-full h-1.5">
+                    <div 
+                      className="bg-indigo-600 h-1.5 rounded-full" 
+                      style={{ width: `${power.mastery}%` }}
+                    ></div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        
+        {/* Participants */}
+        <div className="border rounded-lg p-4 mb-6">
+          <h3 className="text-md font-medium text-gray-900 mb-3">Participants</h3>
+          <div className="space-y-3">
+            {experience.participants.map(participant => (
+              <div key={participant.id} className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center mr-3">
+                    <User className="w-5 h-5 text-indigo-600" />
+                  </div>
+                  <div>
+                    <div className="font-medium text-gray-900">{participant.name}</div>
+                    <div className="text-xs text-gray-500">{participant.status}</div>
+                  </div>
+                </div>
+                <div className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
+                  Active
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        
+        {/* Phase Navigation */}
+        <div className="flex justify-between border-t pt-4">
+          <button 
+            className="px-4 py-2 border rounded-lg text-gray-700 flex items-center"
+            disabled={currentPhase === 0}
+          >
+            Previous Phase
+          </button>
+          <button 
+            className="px-4 py-2 bg-indigo-600 text-white rounded-lg flex items-center"
+            onClick={nextPhase}
+          >
+            {currentPhase < experience.phases.length - 1 ? 'Next Phase' : 'Complete Experience'}
+            <ChevronRight className="w-5 h-5 ml-1" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Book icon component
+const BookIcon = ({ className }) => (
+  <svg 
+    xmlns="http://www.w3.org/2000/svg" 
+    className={className} 
+    fill="none" 
+    viewBox="0 0 24 24" 
+    stroke="currentColor"
+  >
+    <path 
+      strokeLinecap="round" 
+      strokeLinejoin="round" 
+      strokeWidth={2} 
+      d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" 
+    />
+  </svg>
+);
+
+export default ExperienceExecutionInterface;

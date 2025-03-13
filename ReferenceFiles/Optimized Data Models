@@ -1,0 +1,423 @@
+// Core Data Models (TypeScript Interfaces)
+
+// USER SYSTEM
+interface User {
+  _id: string;                    // MongoDB ObjectId
+  username: string;               // Display name
+  email: string;                  // Auth email
+  profile: {
+    avatar: string;               // Avatar URL
+    bio: string;                  // Short bio
+    joinDate: Date;               // Account creation date
+    lastActive: Date;             // Last login timestamp
+    rank: number;                 // Player rank (1-4)
+    economicTier: "Port" | "Laws" | "Republic"; // Access level
+  };
+  virtues: {
+    wisdom: number;               // Soul virtues (0-100)
+    courage: number;
+    temperance: number;
+    justice: number;
+    strength: number;             // Body virtues (0-100)
+    health: number;
+    beauty: number;
+    endurance: number;
+    history: Array<{              // Time-series for tracking
+      date: Date;
+      values: Record<string, number>;
+    }>;
+  };
+  stats: {
+    experiencesCompleted: number;
+    powersCollected: number;
+    zonesControlled: number;
+    raidScore: number;
+  };
+  wallet: {
+    coins: number;                // In-game currency
+    premium: number;              // Premium currency
+    lastTransaction: Date;
+  };
+  settings: {
+    notifications: boolean;
+    privacy: Record<string, boolean>;
+    theme: string;
+  };
+  inventory: string[];            // References to owned items
+  location?: {                    // Optional current location
+    coordinates: [number, number]; // [longitude, latitude]
+    currentZoneId?: string;       // Current zone if in one
+    lastUpdated: Date;
+  };
+}
+
+// POWER SYSTEM (Pokédex equivalent)
+interface Power {
+  _id: string;                    // MongoDB ObjectId
+  name: string;                   // Power name
+  description: string;            // Description
+  category: string;               // Maps to sectors
+  type: "SoulOut" | "SoulIn" | "BodyOut" | "BodyIn"; // Matrix quadrant
+  rarity: "Common" | "Uncommon" | "Rare" | "Epic" | "Legendary";
+  components: {                   // The 5 aspects of each power
+    definition: string;           // What it is
+    end: string;                  // Purpose
+    parts: string;                // Components
+    matter: string;               // Materials
+    instrument: string;           // Tools
+  };
+  stats: {
+    complexity: number;           // Difficulty (1-100)
+    spawn: {
+      rate: number;               // Spawn frequency
+      locations: string[];        // Sector IDs where it appears
+    };
+    unlock: {
+      level: number;              // Min rank required
+      prerequisites: string[];    // IDs of required powers
+    };
+  };
+  assets: {
+    icon: string;                 // Icon URL
+    model?: string;               // Optional 3D model for AR
+    animations?: string[];        // Animation URLs
+  };
+  rewards: {
+    virtues: Record<string, number>; // Virtue points gained
+    xp: number;                    // Experience points
+    coins: number;                 // Currency reward
+  };
+  techTreePosition?: {            // Optional tech tree data
+    x: number;
+    y: number;
+    connections: string[];        // IDs of connected powers
+  };
+}
+
+// USER-POWER RELATIONSHIP
+interface PowerCollection {
+  userId: string;                 // Reference to user
+  powerId: string;                // Reference to power
+  acquired: Date;                 // When obtained
+  mastery: {
+    overall: number;              // Overall mastery (0-100)
+    components: {                 // Component masteries
+      definition: number;
+      end: number;
+      parts: number;
+      matter: number;
+      instrument: number;
+    };
+    uses: number;                 // Times used
+    lastUsed?: Date;              // Last usage timestamp
+  };
+  notes: string;                  // User's personal notes
+  favorite: boolean;              // Favorited by user
+}
+
+// EXPERIENCE SYSTEM
+interface Experience {
+  _id: string;                    // MongoDB ObjectId
+  name: string;                   // Name of experience
+  description: string;            // Description
+  type: "Quest" | "Challenge" | "Collaboration" | "Innovation" | "Reflection";
+  difficulty: number;             // Difficulty (1-100)
+  duration: {
+    estimate: number;             // Estimated minutes
+    maximum: number;              // Maximum allowed minutes
+  };
+  requirements: {
+    minimumRank: number;          // Required player rank
+    powers: string[];             // Required power IDs
+    minPlayers: number;           // Minimum participants
+    maxPlayers: number;           // Maximum participants
+    resources?: string[];         // Required resource IDs
+  };
+  location: {
+    type: "Anywhere" | "Zone" | "Coordinates";
+    zoneId?: string;              // If zone-specific
+    coordinates?: [number, number]; // If coordinate-specific
+    radius?: number;              // Radius in meters
+  };
+  flow: ("SoulOut" | "SoulIn" | "BodyOut" | "BodyIn")[]; // Activity sequence
+  phases: Array<{                 // Multi-stage experiences
+    name: string;
+    description: string;
+    duration: number;             // Minutes
+    tasks: string[];              // Task descriptions
+    verification: "Auto" | "Submission" | "Peer" | "Admin";
+  }>;
+  rewards: {
+    virtues: Record<string, number>; // Virtue points
+    xp: number;                    // Experience points
+    coins: number;                 // Currency
+    powers?: string[];            // Power IDs as rewards
+    items?: string[];             // Item IDs as rewards
+  };
+  cooldown: number;               // Hours before repeatable
+  creatorId?: string;             // User ID of creator if user-generated
+}
+
+// EXPERIENCE INSTANCE (Actual player activity)
+interface ExperienceInstance {
+  _id: string;                    // MongoDB ObjectId
+  experienceId: string;           // Reference to experience template
+  status: "Scheduled" | "InProgress" | "Completed" | "Failed" | "Abandoned";
+  participants: Array<{
+    userId: string;               // User ID
+    role: string;                 // Role in experience
+    status: "Active" | "Completed" | "Failed";
+    joinTime: Date;               // When they joined
+    completeTime?: Date;          // When they completed
+  }>;
+  progress: {
+    currentPhase: number;         // Current phase index
+    startTime: Date;              // When experience started
+    lastUpdate: Date;             // Last activity timestamp
+    estimatedCompletion: Date;    // Projected end time
+    submissions: Array<{          // User submissions
+      userId: string;
+      content: string;            // Text, image URL, etc.
+      timestamp: Date;
+      verified: boolean;
+    }>;
+  };
+  results?: {                     // Populated when completed
+    completionTime: Date;
+    rewards: Record<string, any>; // Actual rewards given
+    feedback: string[];           // Comments/feedback
+  };
+  zoneId?: string;                // Zone where it occurred
+}
+
+// ZONE SYSTEM
+interface Zone {
+  _id: string;                    // MongoDB ObjectId
+  name: string;                   // Zone name
+  description: string;            // Description
+  type: string;                   // Zone type
+  sector: {                       // Parent sector
+    id: string;                   // Sector ID
+    name: string;                 // Sector name
+    type: string;                 // Sector type (12 categories)
+  };
+  geometry: {
+    type: "Point" | "Polygon";    // GeoJSON type
+    coordinates: number[][];      // GeoJSON coordinates
+    center: [number, number];     // Center point
+    radius?: number;              // Radius if circular
+  };
+  rank: number;                   // Zone level (1-4)
+  ownership: {
+    controlledBy: string;         // Team ID of controllers
+    controlledSince: Date;        // When control established
+    previousOwners: Array<{       // Ownership history
+      teamId: string;
+      from: Date;
+      to: Date;
+    }>;
+  };
+  properties: {                   // Property characteristics
+    capacity: number;             // Max users
+    amenities: string[];          // Features
+    rating: number;               // User rating (0-5)
+    price: number;                // Rental price
+    availability: Array<{         // Rental calendar
+      from: Date;
+      to: Date;
+      status: "Available" | "Booked" | "Maintenance";
+    }>;
+  };
+  activity: {
+    currentUsers: number;         // Users present now
+    popularTimes: Record<string, number>; // Day/hour -> popularity
+    events: string[];             // Current event IDs
+  };
+  resources: Array<{              // Zone resources
+    type: string;                 // Resource type
+    quantity: number;             // Amount available
+    regenerationRate: number;     // Units per hour
+    lastUpdated: Date;            // Last regeneration time
+  }>;
+  tech: {
+    unlockedPowers: string[];     // Available power IDs
+    currentPhase: string;         // Tech tree phase
+    specialAbilities: string[];   // Zone special abilities
+  };
+  visuals: {
+    theme: string;                // Visual theme
+    icon: string;                 // Icon URL
+    banner: string;               // Banner image URL
+  };
+}
+
+// TEAM SYSTEM
+interface Team {
+  _id: string;                    // MongoDB ObjectId
+  name: string;                   // Team name
+  description: string;            // Description
+  founderId: string;              // Creator user ID
+  created: Date;                  // Creation date
+  members: Array<{
+    userId: string;               // Member user ID
+    role: "Leader" | "Officer" | "Member"; // Team role
+    joined: Date;                 // Join date
+    contribution: number;         // Contribution score
+  }>;
+  stats: {
+    level: number;                // Team level
+    experience: number;           // Team XP
+    raidWins: number;             // Successful raids
+    raidLosses: number;           // Failed raids
+    zonesControlled: number;      // Zones owned
+  };
+  home: {
+    zoneId?: string;              // Primary zone ID
+    established: Date;            // When established
+  };
+  treasury: {
+    coins: number;                // Team currency
+    resources: Record<string, number>; // Resource inventory
+  };
+  emblem: {
+    icon: string;                 // Emblem URL
+    colors: string[];             // Team colors
+  };
+}
+
+// MARKET SYSTEM
+interface MarketListing {
+  _id: string;                    // MongoDB ObjectId
+  title: string;                  // Listing title
+  description: string;            // Description
+  seller: {
+    id: string;                   // User/Team ID
+    type: "User" | "Team" | "System"; // Seller type
+    name: string;                 // Seller name
+    rating: number;               // Seller rating (0-5)
+  };
+  item: {
+    type: "Power" | "Zone" | "Resource" | "Item" | "Service";
+    id?: string;                  // Item ID if applicable
+    properties: Record<string, any>; // Item details
+    images: string[];             // Image URLs
+  };
+  pricing: {
+    price: number;                // Base price
+    currency: "Coins" | "Premium" | "USD"; // Currency type
+    negotiable: boolean;          // Price negotiable
+    auction?: {                   // If auction format
+      startingBid: number;
+      currentBid: number;
+      endTime: Date;
+      bidHistory: Array<{
+        userId: string;
+        amount: number;
+        time: Date;
+      }>;
+    };
+    economicLayer: "Port" | "Laws" | "Republic"; // Which market layer
+  };
+  status: "Active" | "Sold" | "Expired" | "Cancelled";
+  listed: Date;                   // Listing date
+  expires: Date;                  // Expiration date
+  terms: {
+    delivery: string;             // Delivery method
+    returns: boolean;             // Returns allowed
+    conditions: string[];         // Special conditions
+  };
+  tags: string[];                 // Search tags
+}
+
+// TRANSACTION SYSTEM
+interface Transaction {
+  _id: string;                    // MongoDB ObjectId
+  type: "Purchase" | "Rental" | "Subscription" | "Reward" | "Transfer";
+  buyer: {
+    id: string;                   // User/Team ID
+    type: "User" | "Team";        // Buyer type
+  };
+  seller: {
+    id: string;                   // User/Team/System ID
+    type: "User" | "Team" | "System"; // Seller type
+  };
+  item: {
+    type: "Power" | "Zone" | "Resource" | "Item" | "Service";
+    id?: string;                  // Item ID if applicable
+    name: string;                 // Item name
+    details: Record<string, any>; // Item details
+  };
+  financial: {
+    amount: number;               // Transaction amount
+    currency: "Coins" | "Premium" | "USD"; // Currency type
+    fee: number;                  // Platform fee
+    taxesIncluded: boolean;       // Tax status
+  };
+  timestamps: {
+    created: Date;                // Transaction creation
+    completed?: Date;             // Completion time
+    scheduled?: Date;             // For scheduled transactions
+  };
+  status: "Pending" | "Completed" | "Failed" | "Refunded" | "Disputed";
+  reference?: string;             // External reference
+  marketListingId?: string;       // If from marketplace
+  metadata: Record<string, any>;  // Additional data
+}
+
+// RAID SYSTEM
+interface Raid {
+  _id: string;                    // MongoDB ObjectId
+  type: "Conquest" | "Resource" | "Challenge" | "Tournament";
+  status: "Scheduled" | "InProgress" | "Completed" | "Cancelled";
+  target: {
+    zoneId: string;               // Target zone ID
+    controllingTeamId?: string;   // Current owner team ID
+  };
+  attacker: {
+    teamId: string;               // Attacking team ID
+    members: string[];            // Participating user IDs
+    readiness: number;            // Preparation level (0-100)
+  };
+  defender: {
+    teamId: string;               // Defending team ID
+    members: string[];            // Participating user IDs
+    defenseBonus: number;         // Home advantage bonus
+  };
+  schedule: {
+    announced: Date;              // When raid was announced
+    preparationStart: Date;       // Preparation period start
+    raidStart: Date;              // Actual raid start
+    estimatedDuration: number;    // Estimated minutes
+    completed?: Date;             // When raid ended
+  };
+  mechanics: {
+    format: "Points" | "Capture" | "Time" | "Objective";
+    winCondition: string;         // How to win
+    currentScore?: {              // Current scores
+      attacker: number;
+      defender: number;
+    };
+    phases: string[];             // Raid phases
+    currentPhase?: number;        // Current phase index
+    specialRules: string[];       // Any special rules
+  };
+  rewards: {
+    winner: Record<string, any>;  // Rewards for winner
+    participation: Record<string, any>; // For all participants
+  };
+  results?: {                     // Populated when completed
+    winner: string;               // Winning team ID
+    score: {                      // Final score
+      attacker: number;
+      defender: number;
+    };
+    mvp: string;                  // MVP user ID
+    highlights: string[];         // Notable moments
+    zoneChanges: Record<string, any>; // Changes to zone
+  };
+  feeds: Array<{                  // Live updates
+    timestamp: Date;
+    message: string;
+    eventType: string;
+  }>;
+}

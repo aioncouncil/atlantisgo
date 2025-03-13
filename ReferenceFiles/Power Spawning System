@@ -1,0 +1,727 @@
+/**
+ * Power Spawning Service
+ * 
+ * This service manages the spawning of Powers in the world, similar to 
+ * how Pokémon GO spawns Pokémon.
+ */
+
+import { PowerModel, ZoneModel, UserModel } from '../models';
+import { GeoService } from './geo-service';
+import { WeatherService } from './weather-service';
+import { TimeService } from './time-service';
+import { RedisClient } from '../utils/redis';
+
+class PowerSpawningService {
+  private geoService: GeoService;
+  private weatherService: WeatherService;
+  private timeService: TimeService;
+  private redis: RedisClient;
+  
+  // Cache of active spawn points
+  private activeSpawnPoints: Map<string, any> = new Map();
+  
+  // Spawn configuration
+  private spawnConfig = {
+    baseSpawnRadius: 100, // meters
+    spawnDensity: {
+      urban: 0.0008, // spawns per square meter
+      suburban: 0.0004,
+      rural: 0.0001
+    },
+    spawnDuration: {
+      min: 15 * 60, // 15 minutes in seconds
+      max: 60 * 60  // 60 minutes in seconds
+    },
+    rarityDistribution: {
+      Common: 0.60,
+      Uncommon: 0.25,
+      Rare: 0.10,
+      Epic: 0.04,
+      Legendary: 0.01
+    },
+    refreshInterval: 5 * 60, // 5 minutes in seconds
+    maxConcurrentSpawnsPerZone: 25,
+    minDistanceBetweenSpawns: 20 // meters
+  };
+  
+  constructor(
+    geoService: GeoService,
+    weatherService: WeatherService,
+    timeService: TimeService,
+    redis: RedisClient
+  ) {
+    this.geoService = geoService;
+    this.weatherService = weatherService;
+    this.timeService = timeService;
+    this.redis = redis;
+    
+    // Initialize spawn system
+    this.initializeSpawnSystem();
+  }
+  
+  /**
+   * Initialize the power spawning system
+   */
+  private async initializeSpawnSystem() {
+    console.log('Initializing power spawning system...');
+    
+    // Load existing spawn points from Redis
+    await this.loadActiveSpawnPoints();
+    
+    // Start the spawn refresh cycle
+    this.startSpawnRefreshCycle();
+    
+    console.log(`Power spawning system initialized with ${this.activeSpawnPoints.size} active spawn points`);
+  }
+  
+  /**
+   * Load active spawn points from Redis
+   */
+  private async loadActiveSpawnPoints() {
+    try {
+      const spawnKeys = await this.redis.keys('spawn:*');
+      
+      for (const key of spawnKeys) {
+        const spawnData = await this.redis.get(key);
+        if (spawnData) {
+          const spawn = JSON.parse(spawnData);
+          this.activeSpawnPoints.set(key.replace('spawn:', ''), spawn);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading active spawn points:', error);
+    }
+  }
+  
+  /**
+   * Start the spawn refresh cycle
+   */
+  private startSpawnRefreshCycle() {
+    setInterval(() => {
+      this.refreshSpawns();
+    }, this.spawnConfig.refreshInterval * 1000);
+  }
+  
+  /**
+   * Refresh spawns across the game world
+   */
+  private async refreshSpawns() {
+    console.log('Refreshing power spawns...');
+    
+    try {
+      // Remove expired spawns
+      await this.removeExpiredSpawns();
+      
+      // Get active zones that need spawns
+      const activeZones = await this.getActiveZones();
+      
+      for (const zone of activeZones) {
+        await this.refreshZoneSpawns(zone);
+      }
+      
+      console.log(`Spawn refresh complete. ${this.activeSpawnPoints.size} active spawn points`);
+    } catch (error) {
+      console.error('Error refreshing spawns:', error);
+    }
+  }
+  
+  /**
+   * Remove expired spawns
+   */
+  private async removeExpiredSpawns() {
+    const now = Math.floor(Date.now() / 1000);
+    const expiredSpawnIds = [];
+    
+    // Find expired spawns
+    for (const [spawnId, spawn] of this.activeSpawnPoints.entries()) {
+      if (spawn.expiresAt < now) {
+        expiredSpawnIds.push(spawnId);
+      }
+    }
+    
+    // Remove expired spawns
+    for (const spawnId of expiredSpawnIds) {
+      this.activeSpawnPoints.delete(spawnId);
+      await this.redis.del(`spawn:${spawnId}`);
+    }
+    
+    if (expiredSpawnIds.length > 0) {
+      console.log(`Removed ${expiredSpawnIds.length} expired spawns`);
+    }
+  }
+  
+  /**
+   * Get active zones that need spawns
+   */
+  private async getActiveZones() {
+    // In a real implementation, this would query the database for zones
+    // with active users or high activity levels
+    const activeZones = await ZoneModel.find({
+      'activity.currentUsers': { $gt: 0 }
+    }).limit(50).lean();
+    
+    return activeZones;
+  }
+  
+  /**
+   * Refresh spawns for a specific zone
+   */
+  private async refreshZoneSpawns(zone) {
+    // Get current spawns in this zone
+    const zoneSpawns = Array.from(this.activeSpawnPoints.values())
+      .filter(spawn => spawn.zoneId === zone._id.toString());
+    
+    // If zone already has maximum spawns, no need to add more
+    if (zoneSpawns.length >= this.spawnConfig.maxConcurrentSpawnsPerZone) {
+      return;
+    }
+    
+    // Calculate how many new spawns to add
+    const zoneDensity = this.getZoneDensity(zone);
+    const zoneAreaSqM = this.calculateZoneArea(zone);
+    const idealSpawnCount = Math.floor(zoneAreaSqM * zoneDensity);
+    const spawnsToAdd = Math.min(
+      idealSpawnCount - zoneSpawns.length,
+      this.spawnConfig.maxConcurrentSpawnsPerZone - zoneSpawns.length
+    );
+    
+    if (spawnsToAdd <= 0) return;
+    
+    // Generate new spawns
+    const newSpawns = await this.generateZoneSpawns(zone, spawnsToAdd, zoneSpawns);
+    
+    // Save new spawns
+    for (const spawn of newSpawns) {
+      const spawnId = `${zone._id.toString()}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+      this.activeSpawnPoints.set(spawnId, {
+        ...spawn,
+        id: spawnId
+      });
+      
+      await this.redis.set(
+        `spawn:${spawnId}`,
+        JSON.stringify({
+          ...spawn,
+          id: spawnId
+        }),
+        'EX',
+        spawn.duration
+      );
+    }
+    
+    console.log(`Added ${newSpawns.length} new spawns to zone ${zone.name}`);
+  }
+  
+  /**
+   * Generate new spawns for a zone
+   */
+  private async generateZoneSpawns(zone, count, existingSpawns) {
+    const newSpawns = [];
+    const now = Math.floor(Date.now() / 1000);
+    
+    // Get zone factors that influence spawns
+    const zoneWeather = await this.weatherService.getWeatherForZone(zone._id.toString());
+    const timeFactors = this.timeService.getTimeFactors();
+    const zonePowerTypes = this.getZonePowerTypes(zone);
+    
+    // Get power pool for this zone
+    const powers = await this.getPowerPoolForZone(zone, zonePowerTypes);
+    
+    // Generate spawn points
+    for (let i = 0; i < count; i++) {
+      // Generate spawn location
+      const spawnLocation = this.generateSpawnLocation(
+        zone,
+        existingSpawns.concat(newSpawns)
+      );
+      
+      if (!spawnLocation) {
+        continue; // Skip if we couldn't find a valid location
+      }
+      
+      // Select power to spawn
+      const power = this.selectPowerToSpawn(powers, zoneWeather, timeFactors);
+      
+      if (!power) {
+        continue; // Skip if we couldn't select a power
+      }
+      
+      // Calculate spawn duration
+      const duration = this.calculateSpawnDuration(power.rarity);
+      
+      // Create spawn
+      const spawn = {
+        powerId: power._id.toString(),
+        powerName: power.name,
+        powerRarity: power.rarity,
+        powerType: power.type,
+        location: spawnLocation,
+        zoneId: zone._id.toString(),
+        createdAt: now,
+        expiresAt: now + duration,
+        duration: duration,
+        weather: zoneWeather,
+        capturedBy: []
+      };
+      
+      newSpawns.push(spawn);
+    }
+    
+    return newSpawns;
+  }
+  
+  /**
+   * Generate a spawn location within a zone
+   */
+  private generateSpawnLocation(zone, existingSpawns) {
+    // Try up to 10 times to find a valid location
+    for (let i = 0; i < 10; i++) {
+      // Generate random point within zone
+      const randomPoint = this.geoService.randomPointInPolygon(zone.geometry);
+      
+      // Check if point is too close to existing spawns
+      const tooClose = existingSpawns.some(spawn => {
+        const distance = this.geoService.calculateDistance(
+          randomPoint,
+          spawn.location
+        );
+        return distance < this.spawnConfig.minDistanceBetweenSpawns;
+      });
+      
+      if (!tooClose) {
+        return randomPoint;
+      }
+    }
+    
+    return null; // Could not find valid location
+  }
+  
+  /**
+   * Select a power to spawn based on various factors
+   */
+  private selectPowerToSpawn(powers, weather, timeFactors) {
+    if (powers.length === 0) return null;
+    
+    // Apply modifiers based on weather and time
+    const modifiedPowers = powers.map(power => {
+      let spawnChance = power.stats.spawn.rate;
+      
+      // Apply weather modifier
+      const weatherModifier = this.getWeatherModifier(power, weather);
+      spawnChance *= weatherModifier;
+      
+      // Apply time modifier
+      const timeModifier = this.getTimeModifier(power, timeFactors);
+      spawnChance *= timeModifier;
+      
+      return {
+        ...power,
+        spawnChance
+      };
+    });
+    
+    // Normalize spawn chances
+    const totalChance = modifiedPowers.reduce((sum, p) => sum + p.spawnChance, 0);
+    const normalizedPowers = modifiedPowers.map(power => ({
+      ...power,
+      normalizedChance: power.spawnChance / totalChance
+    }));
+    
+    // Select power using weighted random
+    return this.weightedRandomSelect(normalizedPowers);
+  }
+  
+  /**
+   * Get weather spawn modifier for a power
+   */
+  private getWeatherModifier(power, weather) {
+    // Different powers would have different spawn rates based on weather
+    // This is a simplified example
+    switch (weather) {
+      case 'Clear':
+        return power.type === 'SoulOut' ? 1.2 : 1.0;
+      case 'Rainy':
+        return power.type === 'BodyIn' ? 1.3 : 0.9;
+      case 'Cloudy':
+        return power.type === 'SoulIn' ? 1.2 : 1.0;
+      case 'Windy':
+        return power.type === 'BodyOut' ? 1.2 : 0.9;
+      default:
+        return 1.0;
+    }
+  }
+  
+  /**
+   * Get time spawn modifier for a power
+   */
+  private getTimeModifier(power, timeFactors) {
+    // Different powers would have different spawn rates based on time
+    // This is a simplified example
+    if (timeFactors.isNight && power.type === 'SoulIn') {
+      return 1.3;
+    }
+    
+    if (timeFactors.isDay && power.type === 'SoulOut') {
+      return 1.2;
+    }
+    
+    if (timeFactors.isMorning && power.type === 'BodyOut') {
+      return 1.2;
+    }
+    
+    if (timeFactors.isEvening && power.type === 'BodyIn') {
+      return 1.2;
+    }
+    
+    return 1.0;
+  }
+  
+  /**
+   * Select an item randomly based on weights
+   */
+  private weightedRandomSelect(items) {
+    const rand = Math.random();
+    let cumulativeWeight = 0;
+    
+    for (const item of items) {
+      cumulativeWeight += item.normalizedChance;
+      if (rand <= cumulativeWeight) {
+        return item;
+      }
+    }
+    
+    // Fallback to first item if something went wrong
+    return items[0];
+  }
+  
+  /**
+   * Calculate spawn duration based on rarity
+   */
+  private calculateSpawnDuration(rarity) {
+    const { min, max } = this.spawnConfig.spawnDuration;
+    
+    // Rarer powers stay for less time
+    switch (rarity) {
+      case 'Common':
+        return Math.floor(Math.random() * (max - min) * 0.8 + min);
+      case 'Uncommon':
+        return Math.floor(Math.random() * (max - min) * 0.6 + min);
+      case 'Rare':
+        return Math.floor(Math.random() * (max - min) * 0.4 + min);
+      case 'Epic':
+        return Math.floor(Math.random() * (max - min) * 0.3 + min);
+      case 'Legendary':
+        return Math.floor(Math.random() * (max - min) * 0.2 + min);
+      default:
+        return max;
+    }
+  }
+  
+  /**
+   * Get appropriate power types for a zone
+   */
+  private getZonePowerTypes(zone) {
+    // In a real implementation, this would be more complex
+    // and based on the zone's properties
+    return {
+      primaryTypes: [zone.currentMatrixQuadrant],
+      categories: [zone.sector.type],
+      rarityBoost: zone.rank / 4 // Higher rank zones have more rare spawns
+    };
+  }
+  
+  /**
+   * Get pool of powers that can spawn in this zone
+   */
+  private async getPowerPoolForZone(zone, zoneTypes) {
+    // Query powers that match zone types
+    const powers = await PowerModel.find({
+      $or: [
+        { type: { $in: zoneTypes.primaryTypes } },
+        { category: { $in: zoneTypes.categories } }
+      ],
+      'stats.spawn.locations': zone.sector.type
+    }).lean();
+    
+    // Apply rarity distribution based on zone rank
+    return this.applyRarityDistribution(powers, zoneTypes.rarityBoost);
+  }
+  
+  /**
+   * Apply rarity distribution to power pool
+   */
+  private applyRarityDistribution(powers, rarityBoost = 0) {
+    // Adjust rarity distribution based on boost
+    const distribution = { ...this.spawnConfig.rarityDistribution };
+    
+    if (rarityBoost > 0) {
+      // Reduce common and increase rarer spawns
+      const boost = Math.min(rarityBoost, 0.3); // Cap at 30% boost
+      distribution.Common -= boost * 0.6;
+      distribution.Uncommon -= boost * 0.2;
+      distribution.Rare += boost * 0.3;
+      distribution.Epic += boost * 0.3;
+      distribution.Legendary += boost * 0.2;
+    }
+    
+    // Filter powers by rarity and adjust spawn rates
+    const rarityPowers = {};
+    for (const rarity of Object.keys(distribution)) {
+      rarityPowers[rarity] = powers.filter(p => p.rarity === rarity);
+    }
+    
+    // Combine all powers with adjusted rates
+    const adjustedPowers = [];
+    for (const [rarity, rarityPowerList] of Object.entries(rarityPowers)) {
+      // Skip if no powers of this rarity
+      if (rarityPowerList.length === 0) continue;
+      
+      // Distribute rarity chance evenly among powers of this rarity
+      const chancePerPower = distribution[rarity] / rarityPowerList.length;
+      
+      for (const power of rarityPowerList) {
+        adjustedPowers.push({
+          ...power,
+          spawnChance: chancePerPower * power.stats.spawn.rate
+        });
+      }
+    }
+    
+    return adjustedPowers;
+  }
+  
+  /**
+   * Get zone population density type
+   */
+  private getZoneDensity(zone) {
+    // In a real implementation, this would be based on
+    // actual zone properties and activity levels
+    const { activity } = zone;
+    
+    if (activity.currentUsers > 10) {
+      return this.spawnConfig.spawnDensity.urban;
+    } else if (activity.currentUsers > 3) {
+      return this.spawnConfig.spawnDensity.suburban;
+    } else {
+      return this.spawnConfig.spawnDensity.rural;
+    }
+  }
+  
+  /**
+   * Calculate zone area in square meters
+   */
+  private calculateZoneArea(zone) {
+    // In a real implementation, this would use a proper
+    // geospatial library to calculate polygon area
+    return this.geoService.calculateArea(zone.geometry);
+  }
+  
+  /**
+   * Get nearby power spawns for a user
+   */
+  public async getNearbySpawns(userId, latitude, longitude, radius = 250) {
+    try {
+      // Get user
+      const user = await UserModel.findById(userId).lean();
+      if (!user) {
+        throw new Error('User not found');
+      }
+      
+      const userLocation = [longitude, latitude];
+      const nearbySpawns = [];
+      
+      // Find spawns within radius
+      for (const spawn of this.activeSpawnPoints.values()) {
+        const distance = this.geoService.calculateDistance(
+          userLocation,
+          spawn.location
+        );
+        
+        // Check if spawn is within radius and not already captured by this user
+        if (distance <= radius && !spawn.capturedBy.includes(userId)) {
+          nearbySpawns.push({
+            ...spawn,
+            distance: Math.round(distance)
+          });
+        }
+      }
+      
+      return nearbySpawns;
+    } catch (error) {
+      console.error('Error getting nearby spawns:', error);
+      return [];
+    }
+  }
+  
+  /**
+   * Attempt to capture a power
+   */
+  public async capturePower(userId, spawnId, captureDetails) {
+    try {
+      // Get spawn
+      const spawn = this.activeSpawnPoints.get(spawnId);
+      if (!spawn) {
+        throw new Error('Spawn not found or expired');
+      }
+      
+      // Check if user already captured this spawn
+      if (spawn.capturedBy.includes(userId)) {
+        throw new Error('Power already captured');
+      }
+      
+      // Get user
+      const user = await UserModel.findById(userId);
+      if (!user) {
+        throw new Error('User not found');
+      }
+      
+      // Check if user is close enough to the spawn
+      const userLocation = [captureDetails.longitude, captureDetails.latitude];
+      const distance = this.geoService.calculateDistance(
+        userLocation,
+        spawn.location
+      );
+      
+      if (distance > this.spawnConfig.baseSpawnRadius) {
+        throw new Error('Too far from spawn point');
+      }
+      
+      // Calculate capture chance
+      const captureChance = this.calculateCaptureChance(
+        spawn.powerRarity,
+        captureDetails.boostItems || [],
+        user.rank
+      );
+      
+      // Roll for capture
+      const captureRoll = Math.random();
+      const captureSuccess = captureRoll <= captureChance;
+      
+      if (!captureSuccess) {
+        return {
+          success: false,
+          message: 'Capture failed',
+          chance: captureChance,
+          roll: captureRoll
+        };
+      }
+      
+      // Add user to capturedBy list
+      spawn.capturedBy.push(userId);
+      
+      // Update in Redis
+      await this.redis.set(
+        `spawn:${spawnId}`,
+        JSON.stringify(spawn),
+        'EX',
+        spawn.expiresAt - Math.floor(Date.now() / 1000)
+      );
+      
+      // Update user's power collection
+      const existingPower = await this.getUserPower(userId, spawn.powerId);
+      
+      if (existingPower) {
+        // User already has this power, update mastery
+        await this.updatePowerMastery(userId, spawn.powerId, existingPower);
+      } else {
+        // Add power to user's collection
+        await this.addPowerToCollection(userId, spawn.powerId);
+      }
+      
+      // Return capture result
+      return {
+        success: true,
+        message: 'Power captured successfully!',
+        powerDetails: {
+          id: spawn.powerId,
+          name: spawn.powerName,
+          rarity: spawn.powerRarity,
+          type: spawn.powerType
+        },
+        chance: captureChance,
+        roll: captureRoll,
+        isNew: !existingPower
+      };
+    } catch (error) {
+      console.error('Error capturing power:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Calculate capture chance based on various factors
+   */
+  private calculateCaptureChance(rarity, boostItems = [], userRank = 1) {
+    // Base chance by rarity
+    let baseChance;
+    switch (rarity) {
+      case 'Common':
+        baseChance = 0.8;
+        break;
+      case 'Uncommon':
+        baseChance = 0.6;
+        break;
+      case 'Rare':
+        baseChance = 0.4;
+        break;
+      case 'Epic':
+        baseChance = 0.2;
+        break;
+      case 'Legendary':
+        baseChance = 0.1;
+        break;
+      default:
+        baseChance = 0.5;
+    }
+    
+    // Apply rank bonus (higher rank = better chance)
+    const rankBonus = (userRank - 1) * 0.05;
+    
+    // Apply boost items
+    let boostBonus = 0;
+    for (const item of boostItems) {
+      switch (item) {
+        case 'basicLure':
+          boostBonus += 0.1;
+          break;
+        case 'premiumLure':
+          boostBonus += 0.2;
+          break;
+        case 'masterCapture':
+          boostBonus += 0.5;
+          break;
+        default:
+          boostBonus += 0.05;
+      }
+    }
+    
+    // Calculate final chance, capped at 0.95
+    return Math.min(0.95, baseChance + rankBonus + boostBonus);
+  }
+  
+  /**
+   * Get user's existing power
+   */
+  private async getUserPower(userId, powerId) {
+    // In a real implementation, this would query the PowerCollection model
+    return null; // Placeholder
+  }
+  
+  /**
+   * Update power mastery for existing power
+   */
+  private async updatePowerMastery(userId, powerId, existingPower) {
+    // In a real implementation, this would update the power's mastery level
+    console.log(`Updating power mastery for user ${userId}, power ${powerId}`);
+  }
+  
+  /**
+   * Add power to user's collection
+   */
+  private async addPowerToCollection(userId, powerId) {
+    // In a real implementation, this would create a new entry in PowerCollection
+    console.log(`Adding power ${powerId} to collection for user ${userId}`);
+  }
+}
+
+export default PowerSpawningService;

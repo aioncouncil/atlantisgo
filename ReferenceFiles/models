@@ -1,0 +1,1061 @@
+# EudaimoniaGo: Complete Models for Implementation
+
+This document provides the comprehensive model structure for implementing EudaimoniaGo, with detailed field specifications and implementation notes.
+
+## Database Models
+
+### User System
+
+#### 1. User
+```javascript
+{
+  id: "UUID", // Primary key
+  username: "String", // Unique username
+  email: "String", // Unique email address
+  password: "String", // Hashed password
+  avatar: "ImageReference", // URL or asset ID
+  dateJoined: "Timestamp",
+  lastActive: "Timestamp",
+  rank: "Integer (1-4)", // Current user rank
+  economicLayer: "Enum(Port, Laws, Republic)", // Current economic system
+  tutorialProgress: "JSON", // Tracks onboarding progress
+  deviceSettings: "JSON", // User preferences for devices
+  createdAt: "Timestamp",
+  updatedAt: "Timestamp"
+}
+```
+
+#### 2. VirtueMetrics
+```javascript
+{
+  id: "UUID", // Primary key
+  userId: "UUID", // Foreign key -> User
+  happiness: "Float (0-100)", // Overall happiness score
+  goodScore: "Float (0-100)", // Soul virtue aggregate
+  prosperityScore: "Float (0-100)", // Body virtue aggregate
+  wisdom: "Float (0-100)",
+  courage: "Float (0-100)",
+  temperance: "Float (0-100)",
+  justice: "Float (0-100)",
+  strength: "Float (0-100)",
+  health: "Float (0-100)",
+  beauty: "Float (0-100)",
+  endurance: "Float (0-100)",
+  virtueHistory: "JSON", // Time-series data for tracking progress
+  lastCalculated: "Timestamp",
+  createdAt: "Timestamp",
+  updatedAt: "Timestamp"
+}
+```
+
+#### 3. UserPreferences
+```javascript
+{
+  id: "UUID", // Primary key
+  userId: "UUID", // Foreign key -> User
+  interfaceSettings: "JSON", // UI customization
+  notificationPreferences: "JSON", // Notification settings
+  privacySettings: "JSON", // Privacy controls
+  aiGuideSettings: "JSON", // AI interaction preferences
+  languagePreference: "String", // Preferred language
+  accessibilityOptions: "JSON", // Accessibility settings
+  createdAt: "Timestamp",
+  updatedAt: "Timestamp"
+}
+```
+
+#### 4. UserLocation
+```javascript
+{
+  id: "UUID", // Primary key
+  userId: "UUID", // Foreign key -> User
+  latitude: "Float",
+  longitude: "Float",
+  currentZoneId: "UUID", // Foreign key -> Zone
+  previousZoneIds: "Array[UUID]", // Recently visited zones
+  lastUpdated: "Timestamp",
+  accuracyMeters: "Float",
+  deviceId: "String"
+}
+```
+
+### Art System (Core Pokédex)
+
+#### 5. Art
+```javascript
+{
+  id: "UUID", // Primary key
+  name: "String",
+  description: "Text",
+  category: "String", // Maps to Sector
+  subcategory: "String",
+  complexity: "Integer (1-100)",
+  rarity: "Enum(Common, Uncommon, Rare, Epic, Legendary)",
+  matrixQuadrant: "Enum(SoulOut, SoulIn, BodyOut, BodyIn)",
+  isComposite: "Boolean", // Whether this is made up of other arts
+  requiredArts: "Array[UUID]", // Foreign keys -> Art
+  unlockConditions: "JSON",
+  economicValue: "Float",
+  captureChallenge: "JSON", // What's required to capture
+  iconAsset: "ImageReference",
+  spawnFrequency: "Float",
+  taxonomyId: "UUID", // Foreign key -> ArtTaxonomy
+  createdAt: "Timestamp",
+  updatedAt: "Timestamp",
+  isOfficial: "Boolean", // System vs user-created
+  creatorId: "UUID" // Foreign key -> User (null if system-created)
+}
+```
+
+#### 6. ArtParts
+```javascript
+{
+  id: "UUID", // Primary key
+  artId: "UUID", // Foreign key -> Art
+  partType: "Enum(Definition, End, Parts, Matter, Instrument)",
+  content: "Text",
+  mediaReferences: "Array[UUID]", // Foreign keys -> MediaAsset
+  verificationCriteria: "JSON",
+  aiPrompts: "Text", // Guidance for AI verification
+  createdAt: "Timestamp",
+  updatedAt: "Timestamp"
+}
+```
+
+#### 7. ArtMastery
+```javascript
+{
+  id: "UUID", // Primary key
+  userId: "UUID", // Foreign key -> User
+  artId: "UUID", // Foreign key -> Art
+  overallLevel: "Float (0-100)",
+  definitionLevel: "Float (0-100)",
+  endLevel: "Float (0-100)",
+  partsLevel: "Float (0-100)",
+  matterLevel: "Float (0-100)",
+  instrumentLevel: "Float (0-100)",
+  practiceCount: "Integer",
+  lastPracticed: "Timestamp",
+  virtueContributions: "JSON", // Mapping to virtue gains
+  notes: "Text", // User's personal notes
+  isPublic: "Boolean", // Whether visible to others
+  createdAt: "Timestamp",
+  updatedAt: "Timestamp"
+}
+```
+
+#### 8. ArtStage
+```javascript
+{
+  id: "UUID", // Primary key
+  artId: "UUID", // Foreign key -> Art
+  sequenceOrder: "Integer", // Order in learning sequence
+  name: "String",
+  description: "Text",
+  duration: "String", // Estimated time
+  completionCriteria: "JSON",
+  resourceRequirements: "JSON",
+  verificationMethod: "JSON",
+  createdAt: "Timestamp",
+  updatedAt: "Timestamp"
+}
+```
+
+#### 9. UserArtStageProgress
+```javascript
+{
+  id: "UUID", // Primary key
+  userId: "UUID", // Foreign key -> User
+  artId: "UUID", // Foreign key -> Art
+  stageId: "UUID", // Foreign key -> ArtStage
+  startTime: "Timestamp",
+  completionTime: "Timestamp",
+  status: "Enum(NotStarted, InProgress, Submitted, Verified, Failed)",
+  evidence: "Array[UUID]", // Foreign keys -> MediaAsset
+  feedback: "Text",
+  verifiedBy: "UUID", // Foreign key -> User (null for system verification)
+  createdAt: "Timestamp",
+  updatedAt: "Timestamp"
+}
+```
+
+#### 10. ArtTaxonomy
+```javascript
+{
+  id: "UUID", // Primary key
+  name: "String",
+  level: "Enum(Genus, Species, Instance)",
+  parentId: "UUID", // Foreign key -> ArtTaxonomy (null for genus level)
+  description: "Text",
+  artIds: "Array[UUID]", // Foreign keys -> Art
+  displayOrder: "Integer",
+  iconAsset: "ImageReference",
+  createdAt: "Timestamp",
+  updatedAt: "Timestamp"
+}
+```
+
+#### 11. TechTree
+```javascript
+{
+  id: "UUID", // Primary key
+  name: "String",
+  description: "Text",
+  nodes: "JSON", // Array of Art IDs with positions
+  connections: "JSON", // Links between nodes with requirements
+  progressionPaths: "JSON", // Suggested learning sequences
+  categories: "JSON", // Groupings of nodes
+  version: "Integer",
+  isDefault: "Boolean",
+  createdAt: "Timestamp",
+  updatedAt: "Timestamp"
+}
+```
+
+#### 12. UserTechTreeProgress
+```javascript
+{
+  id: "UUID", // Primary key
+  userId: "UUID", // Foreign key -> User
+  techTreeId: "UUID", // Foreign key -> TechTree
+  unlockedNodes: "Array[UUID]", // Foreign keys -> Art
+  currentFocus: "Array[UUID]", // Foreign keys -> Art
+  completionPercentage: "Float",
+  milestones: "JSON",
+  createdAt: "Timestamp",
+  updatedAt: "Timestamp"
+}
+```
+
+### Experience System
+
+#### 13. Experience
+```javascript
+{
+  id: "UUID", // Primary key
+  name: "String",
+  description: "Text",
+  type: "Enum(Quest, Challenge, Collaboration, Innovation, Reflection)",
+  difficulty: "Integer (1-100)",
+  duration: "String", // Estimated time
+  primaryArtId: "UUID", // Foreign key -> Art
+  supportingArtIds: "Array[UUID]", // Foreign keys -> Art
+  matrixFlow: "Array[Enum(SoulOut, SoulIn, BodyOut, BodyIn)]",
+  phases: "JSON", // Details of phases
+  rewards: "JSON",
+  verificationMethod: "JSON",
+  economicModel: "Enum(Port, Laws, Republic)",
+  availabilityConditions: "JSON",
+  requiredRank: "Integer",
+  locationRequirements: "JSON",
+  minParticipants: "Integer",
+  maxParticipants: "Integer",
+  goodType: "Enum(Present, Future, PresentFuture)", // Type of good created
+  repeatable: "Boolean",
+  cooldownPeriod: "Integer", // Hours
+  createdAt: "Timestamp",
+  updatedAt: "Timestamp",
+  creatorId: "UUID" // Foreign key -> User (null if system-created)
+}
+```
+
+#### 14. ExperienceInstance
+```javascript
+{
+  id: "UUID", // Primary key
+  experienceId: "UUID", // Foreign key -> Experience
+  hostId: "UUID", // Foreign key -> User
+  participantIds: "Array[UUID]", // Foreign keys -> User
+  currentPhase: "Integer",
+  scheduleStartTime: "Timestamp",
+  actualStartTime: "Timestamp",
+  completionTime: "Timestamp",
+  status: "Enum(Scheduled, InProgress, Completed, Failed, Abandoned)",
+  phaseProgress: "JSON",
+  submissions: "Array[UUID]", // Foreign keys -> Artifact
+  verificationStatus: "JSON",
+  feedback: "JSON",
+  resourcesAllocated: "JSON",
+  zoneId: "UUID", // Foreign key -> Zone (if zone-specific)
+  createdAt: "Timestamp",
+  updatedAt: "Timestamp"
+}
+```
+
+#### 15. Artifact
+```javascript
+{
+  id: "UUID", // Primary key
+  name: "String",
+  creatorId: "UUID", // Foreign key -> User
+  experienceInstanceId: "UUID", // Foreign key -> ExperienceInstance
+  type: "String",
+  description: "Text",
+  content: "JSON/Text",
+  mediaAssets: "Array[UUID]", // Foreign keys -> MediaAsset
+  reviews: "JSON",
+  economicValue: "Float",
+  licensingTerms: "JSON",
+  isPublic: "Boolean",
+  createdAt: "Timestamp",
+  updatedAt: "Timestamp"
+}
+```
+
+#### 16. MediaAsset
+```javascript
+{
+  id: "UUID", // Primary key
+  ownerId: "UUID", // Foreign key -> User
+  type: "Enum(Image, Video, Audio, Document, 3DModel)",
+  url: "String",
+  fileSize: "Integer",
+  metadata: "JSON",
+  thumbnailUrl: "String",
+  tags: "Array[String]",
+  permissions: "JSON",
+  createdAt: "Timestamp",
+  updatedAt: "Timestamp"
+}
+```
+
+### Zone System
+
+#### 17. Zone
+```javascript
+{
+  id: "UUID", // Primary key
+  name: "String",
+  description: "Text",
+  type: "String",
+  sectorId: "UUID", // Foreign key -> Sector
+  latitude: "Float",
+  longitude: "Float",
+  radius: "Float",
+  controllingTeamId: "UUID", // Foreign key -> Team
+  currentMatrixQuadrant: "Enum(SoulOut, SoulIn, BodyOut, BodyIn)",
+  rankLevel: "Integer (1-4)",
+  economicModel: "Enum(Laws, Republic)",
+  activeEvents: "Array[UUID]", // Foreign keys -> Event
+  techTreeProgress: "JSON",
+  visualTheme: "JSON",
+  spawnableArts: "Array[UUID]", // Foreign keys -> Art
+  createdAt: "Timestamp",
+  updatedAt: "Timestamp"
+}
+```
+
+#### 18. Sector
+```javascript
+{
+  id: "UUID", // Primary key
+  name: "String",
+  description: "Text",
+  type: "Enum(Instruments, Defenses, Materials, Health, Ornaments, Vessels, Vehicles, Labor, Commerce, Scripts, Analysis, Direction)",
+  zoneCount: "Integer", // Target: 420
+  governanceModel: "JSON",
+  specialAbilities: "JSON",
+  dominantVirtues: "JSON",
+  createdAt: "Timestamp",
+  updatedAt: "Timestamp"
+}
+```
+
+#### 19. ZoneHierarchy
+```javascript
+{
+  id: "UUID", // Primary key
+  parentZoneId: "UUID", // Foreign key -> Zone
+  childZoneId: "UUID", // Foreign key -> Zone
+  relationshipType: "Enum(Oversight, Advice, Resource, Protection)",
+  authorities: "JSON", // What the parent can do to the child
+  responsibilities: "JSON", // What the parent must do for the child
+  rotationSchedule: "JSON", // For implementing monthly rotation
+  createdAt: "Timestamp",
+  updatedAt: "Timestamp"
+}
+```
+
+#### 20. ZoneMembership
+```javascript
+{
+  id: "UUID", // Primary key
+  userId: "UUID", // Foreign key -> User
+  zoneId: "UUID", // Foreign key -> Zone
+  role: "String",
+  permissionLevel: "Integer (1-5)",
+  joinDate: "Timestamp",
+  contributionMetrics: "JSON",
+  reputation: "Float",
+  isActive: "Boolean",
+  expiryDate: "Timestamp", // If temporary
+  createdAt: "Timestamp",
+  updatedAt: "Timestamp"
+}
+```
+
+#### 21. ZoneResources
+```javascript
+{
+  id: "UUID", // Primary key
+  zoneId: "UUID", // Foreign key -> Zone
+  resourceType: "String",
+  quantity: "Float",
+  quality: "Float (1-100)",
+  accessibility: "JSON", // Who can access and how
+  replenishRate: "Float",
+  lastReplenished: "Timestamp",
+  createdAt: "Timestamp",
+  updatedAt: "Timestamp"
+}
+```
+
+#### 22. ResourceFlow
+```javascript
+{
+  id: "UUID", // Primary key
+  sourceZoneId: "UUID", // Foreign key -> Zone
+  destinationZoneId: "UUID", // Foreign key -> Zone
+  resourceType: "String",
+  quantity: "Float",
+  frequency: "String", // daily, weekly, etc.
+  justification: "Text",
+  requiresApproval: "Boolean",
+  approvalAuthority: "UUID", // Foreign key -> Zone
+  lastExecuted: "Timestamp",
+  nextScheduled: "Timestamp",
+  status: "Enum(Active, Suspended, Terminated)",
+  createdAt: "Timestamp",
+  updatedAt: "Timestamp"
+}
+```
+
+#### 23. ZoneActivity
+```javascript
+{
+  id: "UUID", // Primary key
+  zoneId: "UUID", // Foreign key -> Zone
+  type: "Enum(ThinkTank, Production, Review, Resource)",
+  name: "String",
+  description: "Text",
+  participantIds: "Array[UUID]", // Foreign keys -> User
+  startTime: "Timestamp",
+  endTime: "Timestamp",
+  status: "Enum(Scheduled, InProgress, Completed)",
+  outcomes: "JSON",
+  resourcesUsed: "JSON",
+  artifacts: "Array[UUID]", // Foreign keys -> Artifact
+  createdAt: "Timestamp",
+  updatedAt: "Timestamp"
+}
+```
+
+#### 24. ZoneRaid
+```javascript
+{
+  id: "UUID", // Primary key
+  targetZoneId: "UUID", // Foreign key -> Zone
+  attackingTeamId: "UUID", // Foreign key -> Team
+  defendingTeamId: "UUID", // Foreign key -> Team
+  challengeType: "String",
+  startTime: "Timestamp",
+  endTime: "Timestamp",
+  currentScore: "JSON",
+  status: "Enum(Scheduled, InProgress, Completed)",
+  rewards: "JSON",
+  participants: "Array[UUID]", // Foreign keys -> User
+  createdAt: "Timestamp",
+  updatedAt: "Timestamp"
+}
+```
+
+#### 25. ZoneDeficiency
+```javascript
+{
+  id: "UUID", // Primary key
+  zoneId: "UUID", // Foreign key -> Zone
+  deficiencyType: "String",
+  description: "Text",
+  impactMetrics: "JSON",
+  detectionMethod: "String",
+  proposedSolutions: "JSON",
+  status: "Enum(Detected, Acknowledged, Addressing, Resolved)",
+  createdAt: "Timestamp",
+  updatedAt: "Timestamp"
+}
+```
+
+### Social System
+
+#### 26. Team
+```javascript
+{
+  id: "UUID", // Primary key
+  name: "String",
+  description: "Text",
+  founderUserId: "UUID", // Foreign key -> User
+  memberIds: "Array[UUID]", // Foreign keys -> User
+  roles: "JSON", // Member role assignments
+  formationDate: "Timestamp",
+  logo: "ImageReference",
+  achievements: "JSON",
+  primaryZoneId: "UUID", // Foreign key -> Zone (can be null)
+  isPublic: "Boolean",
+  joinRequirements: "JSON",
+  createdAt: "Timestamp",
+  updatedAt: "Timestamp"
+}
+```
+
+#### 27. SocialConnection
+```javascript
+{
+  id: "UUID", // Primary key
+  userId: "UUID", // Foreign key -> User
+  connectedUserId: "UUID", // Foreign key -> User
+  connectionType: "Enum(Friend, Collaborator, Mentor, Mentee)",
+  status: "Enum(Pending, Active, Blocked)",
+  startDate: "Timestamp",
+  metrics: "JSON", // Collaboration history
+  lastInteraction: "Timestamp",
+  notes: "Text",
+  createdAt: "Timestamp",
+  updatedAt: "Timestamp"
+}
+```
+
+#### 28. Message
+```javascript
+{
+  id: "UUID", // Primary key
+  senderId: "UUID", // Foreign key -> User
+  recipientId: "UUID", // Foreign key -> User or Team
+  recipientType: "Enum(User, Team)",
+  content: "Text",
+  mediaAttachments: "Array[UUID]", // Foreign keys -> MediaAsset
+  readStatus: "Boolean",
+  sentTime: "Timestamp",
+  readTime: "Timestamp",
+  createdAt: "Timestamp",
+  updatedAt: "Timestamp"
+}
+```
+
+#### 29. Notification
+```javascript
+{
+  id: "UUID", // Primary key
+  userId: "UUID", // Foreign key -> User
+  type: "String",
+  content: "JSON",
+  priority: "Integer (1-5)",
+  readStatus: "Boolean",
+  actionUrl: "String",
+  relatedEntityId: "UUID",
+  relatedEntityType: "String",
+  createdAt: "Timestamp",
+  updatedAt: "Timestamp"
+}
+```
+
+### Economic System
+
+#### 30. ResourceInventory
+```javascript
+{
+  id: "UUID", // Primary key
+  ownerId: "UUID",
+  ownerType: "Enum(User, Zone, Team)",
+  resources: "JSON", // Detailed inventory with quantities
+  currency: "JSON", // Different currency types and amounts
+  economicLayer: "Enum(Port, Laws, Republic)",
+  lastTransaction: "Timestamp",
+  totalValue: "Float",
+  createdAt: "Timestamp",
+  updatedAt: "Timestamp"
+}
+```
+
+#### 31. Resource
+```javascript
+{
+  id: "UUID", // Primary key
+  name: "String",
+  description: "Text",
+  type: "String",
+  rarity: "Enum(Common, Uncommon, Rare, Epic, Legendary)",
+  baseValue: "Float",
+  properties: "JSON",
+  usableWithArts: "Array[UUID]", // Foreign keys -> Art
+  durability: "Float",
+  quantity: "Float",
+  iconAsset: "ImageReference",
+  physicsProperties: "JSON", // For simulation
+  createdAt: "Timestamp",
+  updatedAt: "Timestamp"
+}
+```
+
+#### 32. MarketListing
+```javascript
+{
+  id: "UUID", // Primary key
+  sellerId: "UUID",
+  sellerType: "Enum(User, Zone, Team, System)",
+  itemType: "String",
+  referenceId: "UUID",
+  title: "String",
+  description: "Text",
+  price: "Float",
+  currency: "String",
+  economicLayer: "Enum(Port, Laws, Republic)",
+  status: "Enum(Active, Sold, Expired, Cancelled)",
+  expiryDate: "Timestamp",
+  quantity: "Integer",
+  tags: "Array[String]",
+  mediaAssets: "Array[UUID]", // Foreign keys -> MediaAsset
+  createdAt: "Timestamp",
+  updatedAt: "Timestamp"
+}
+```
+
+#### 33. EconomicTransaction
+```javascript
+{
+  id: "UUID", // Primary key
+  buyerId: "UUID",
+  buyerType: "Enum(User, Zone, Team)",
+  sellerId: "UUID",
+  sellerType: "Enum(User, Zone, Team, System)",
+  listingId: "UUID", // Foreign key -> MarketListing
+  amount: "Float",
+  currency: "String",
+  economicLayer: "Enum(Port, Laws, Republic)",
+  transactionType: "String",
+  status: "Enum(Pending, Completed, Refunded, Disputed)",
+  transactionTime: "Timestamp",
+  metadata: "JSON",
+  createdAt: "Timestamp",
+  updatedAt: "Timestamp"
+}
+```
+
+#### 34. WealthClass
+```javascript
+{
+  id: "UUID", // Primary key
+  userId: "UUID", // Foreign key -> User
+  level: "Integer (1-4)",
+  privileges: "JSON",
+  responsibilities: "JSON",
+  zoneAllocations: "Array[UUID]", // Foreign keys -> Zone
+  qualificationCriteria: "JSON",
+  evaluationTime: "Timestamp",
+  reviewerId: "UUID", // Foreign key -> User
+  createdAt: "Timestamp",
+  updatedAt: "Timestamp"
+}
+```
+
+#### 35. CommonResource
+```javascript
+{
+  id: "UUID", // Primary key
+  name: "String",
+  description: "Text",
+  resourceType: "String",
+  quantity: "Float",
+  quality: "Float",
+  accessCriteria: "JSON",
+  governanceVotes: "JSON",
+  stewardIds: "Array[UUID]", // Foreign keys -> User
+  usageLog: "JSON",
+  replenishmentSchedule: "JSON",
+  createdAt: "Timestamp",
+  updatedAt: "Timestamp"
+}
+```
+
+#### 36. Project
+```javascript
+{
+  id: "UUID", // Primary key
+  name: "String",
+  description: "Text",
+  initiatorId: "UUID",
+  initiatorType: "Enum(User, Zone, Team)",
+  status: "Enum(Proposed, Funding, InProgress, Completed, Cancelled)",
+  fundingGoal: "Float",
+  currentFunding: "Float",
+  startDate: "Timestamp",
+  endDate: "Timestamp",
+  milestones: "JSON",
+  economicModel: "Enum(Port, Laws, Republic)",
+  contributorIds: "Array[UUID]", // Foreign keys -> User
+  artifacts: "Array[UUID]", // Foreign keys -> Artifact
+  zoneId: "UUID", // Foreign key -> Zone (if zone-specific)
+  createdAt: "Timestamp",
+  updatedAt: "Timestamp"
+}
+```
+
+### AI Guide System
+
+#### 37. UserGoal
+```javascript
+{
+  id: "UUID", // Primary key
+  userId: "UUID", // Foreign key -> User
+  title: "String",
+  description: "Text",
+  targetVirtues: "JSON", // Which virtues to improve
+  recommendedArts: "Array[UUID]", // Foreign keys -> Art
+  progress: "Float (0-100)",
+  priority: "Integer (1-10)",
+  startDate: "Timestamp",
+  targetDate: "Timestamp",
+  status: "Enum(Active, Completed, Abandoned)",
+  milestones: "JSON",
+  aiGenerated: "Boolean",
+  parentGoalId: "UUID", // Foreign key -> UserGoal (for sub-goals)
+  createdAt: "Timestamp",
+  updatedAt: "Timestamp"
+}
+```
+
+#### 38. AiInteraction
+```javascript
+{
+  id: "UUID", // Primary key
+  userId: "UUID", // Foreign key -> User
+  interactionType: "String",
+  content: "Text",
+  suggestions: "JSON",
+  timestamp: "Timestamp",
+  relatedEntities: "JSON", // Arts, Experiences, etc. referenced
+  sentiment: "Float (-1.0 to 1.0)",
+  helpfulnessRating: "Integer (1-5)", // User-provided
+  createdAt: "Timestamp",
+  updatedAt: "Timestamp"
+}
+```
+
+#### 39. HappinessRecommendation
+```javascript
+{
+  id: "UUID", // Primary key
+  userId: "UUID", // Foreign key -> User
+  recommendationType: "String",
+  targetDeficiency: "String", // Which virtue to improve
+  suggestedAction: "JSON",
+  predictedImpact: "Float",
+  generatedTime: "Timestamp",
+  status: "Enum(New, Viewed, Accepted, Rejected, Completed)",
+  outcome: "JSON", // Actual results if implemented
+  aiConfidence: "Float (0-100)",
+  createdAt: "Timestamp",
+  updatedAt: "Timestamp"
+}
+```
+
+#### 40. ArtProposal
+```javascript
+{
+  id: "UUID", // Primary key
+  proposerId: "UUID", // Foreign key -> User
+  name: "String",
+  description: "Text",
+  category: "String",
+  subcategory: "String",
+  taxonomyId: "UUID", // Foreign key -> ArtTaxonomy
+  matrixQuadrant: "Enum(SoulOut, SoulIn, BodyOut, BodyIn)",
+  justification: "Text",
+  deficiencyAddressed: "Text",
+  draftParts: "JSON", // All five parts
+  reviewStatus: "Enum(Proposed, InReview, Approved, Rejected)",
+  reviewerIds: "Array[UUID]", // Foreign keys -> User
+  comments: "JSON",
+  createdAt: "Timestamp",
+  updatedAt: "Timestamp"
+}
+```
+
+### Meta-Governance System
+
+#### 41. MetaRole
+```javascript
+{
+  id: "UUID", // Primary key
+  name: "String",
+  description: "Text",
+  governanceLevel: "Integer (1-4)",
+  requiredVirtues: "JSON",
+  primaryMatrixQuadrant: "Enum(SoulOut, SoulIn, BodyOut, BodyIn)",
+  associatedArts: "Array[UUID]", // Foreign keys -> Art
+  responsibilities: "JSON",
+  createdAt: "Timestamp",
+  updatedAt: "Timestamp"
+}
+```
+
+#### 42. MetaRoleAssignment
+```javascript
+{
+  id: "UUID", // Primary key
+  userId: "UUID", // Foreign key -> User
+  metaRoleId: "UUID", // Foreign key -> MetaRole
+  primaryZoneId: "UUID", // Foreign key -> Zone
+  influencedZoneIds: "Array[UUID]", // Foreign keys -> Zone
+  assignmentMethod: "Enum(Election, Appointment, Achievement, Rotation)",
+  startDate: "Timestamp",
+  endDate: "Timestamp",
+  currentStatus: "Enum(Active, Inactive, Probationary)",
+  performanceMetrics: "JSON",
+  createdAt: "Timestamp",
+  updatedAt: "Timestamp"
+}
+```
+
+### Game Mechanics System
+
+#### 43. Achievement
+```javascript
+{
+  id: "UUID", // Primary key
+  name: "String",
+  description: "Text",
+  category: "String",
+  difficulty: "Integer (1-5)",
+  iconAsset: "ImageReference",
+  requirements: "JSON",
+  rewards: "JSON",
+  isSecret: "Boolean",
+  createdAt: "Timestamp",
+  updatedAt: "Timestamp"
+}
+```
+
+#### 44. UserAchievement
+```javascript
+{
+  id: "UUID", // Primary key
+  userId: "UUID", // Foreign key -> User
+  achievementId: "UUID", // Foreign key -> Achievement
+  unlockDate: "Timestamp",
+  progress: "Float (0-100)", // For partial achievements
+  createdAt: "Timestamp",
+  updatedAt: "Timestamp"
+}
+```
+
+#### 45. Event
+```javascript
+{
+  id: "UUID", // Primary key
+  name: "String",
+  description: "Text",
+  type: "Enum(Festival, Tournament, Challenge, TechUnlock, ZoneRaid)",
+  startTime: "Timestamp",
+  endTime: "Timestamp",
+  status: "Enum(Upcoming, Active, Completed, Cancelled)",
+  zoneIds: "Array[UUID]", // Foreign keys -> Zone
+  artIds: "Array[UUID]", // Foreign keys -> Art
+  experienceIds: "Array[UUID]", // Foreign keys -> Experience
+  requirements: "JSON",
+  rewards: "JSON",
+  participantIds: "Array[UUID]", // Foreign keys -> User
+  recurrencePattern: "JSON",
+  createdAt: "Timestamp",
+  updatedAt: "Timestamp"
+}
+```
+
+#### 46. UserActivity
+```javascript
+{
+  id: "UUID", // Primary key
+  userId: "UUID", // Foreign key -> User
+  activityType: "String",
+  entityId: "UUID",
+  entityType: "String",
+  details: "JSON",
+  timestamp: "Timestamp",
+  location: "JSON", // lat/long if relevant
+  createdAt: "Timestamp",
+  updatedAt: "Timestamp"
+}
+```
+
+#### 47. PhysicsSimulation
+```javascript
+{
+  id: "UUID", // Primary key
+  name: "String",
+  type: "String",
+  entities: "JSON", // Objects with physics properties
+  forces: "JSON",
+  constraints: "JSON",
+  iterationRate: "Float",
+  visualEffects: "JSON",
+  createdAt: "Timestamp",
+  updatedAt: "Timestamp"
+}
+```
+
+#### 48. InnovationProcess
+```javascript
+{
+  id: "UUID", // Primary key
+  name: "String",
+  initiatorId: "UUID", // Foreign key -> User
+  zoneId: "UUID", // Foreign key -> Zone
+  innovationType: "String",
+  currentStage: "Enum(Order, Arrangement, Eurythmy, Symmetry, Propriety, Economy)",
+  stageProgress: "JSON", // Tracking progress in each stage
+  artifacts: "Array[UUID]", // Foreign keys -> Artifact
+  participantIds: "Array[UUID]", // Foreign keys -> User
+  problemStatement: "Text",
+  proposedSolution: "Text",
+  validationMetrics: "JSON",
+  status: "Enum(InProgress, Completed, Failed)",
+  createdAt: "Timestamp",
+  updatedAt: "Timestamp"
+}
+```
+
+## Implementation Notes
+
+### 1. JSON Field Structure
+
+When you see "JSON" as a field type, this represents structured data that would be stored as either:
+- A JSON string in a database that supports it
+- A nested document in MongoDB
+- A separate related table in SQL databases
+- A serialized object in application code
+
+Example of what might be in a JSON field like `UserGoal.milestones`:
+
+```javascript
+[
+  {
+    "id": "m1",
+    "name": "Complete 'Foundations of Dialogue' experience",
+    "description": "Participate in the basic experience to learn fundamentals",
+    "experienceId": "exp-1234",
+    "completed": true,
+    "completionDate": "2025-03-01T14:32:22Z"
+  },
+  {
+    "id": "m2", 
+    "name": "Practice in 3 different zone discussions",
+    "description": "Apply your skills in various contexts",
+    "count": 3,
+    "progress": 2,
+    "zones": ["zone-123", "zone-456"]
+  },
+  // Additional milestones...
+]
+```
+
+### 2. Database Considerations
+
+#### NoSQL (MongoDB) Approach
+- Well-suited for this model structure with many JSON fields
+- Easily handle varying schema needs for different art types
+- Good performance for location-based queries
+- Consider using references for frequently updated related models
+- Use embedded documents for tightly coupled data like ArtParts
+
+#### SQL Approach
+- For SQL databases, normalize the JSON fields into related tables
+- Use junction tables for many-to-many relationships (e.g., User-Art)
+- Consider using PostgreSQL for its JSON/JSONB support
+- Index on frequently queried fields like userId, zoneId, etc.
+- Use database views to simplify complex queries
+
+### 3. Phased Implementation Strategy
+
+#### Phase 1: Core Pokédex System
+1. User, VirtueMetrics, Art, ArtParts, ArtMastery
+2. Basic AI interaction (UserGoal, AiInteraction)
+3. Simple map functionality
+
+#### Phase 2: Experience Engine
+1. Experience, ExperienceInstance
+2. Artifact creation
+3. Simple Zone interactions
+
+#### Phase 3: Economic Foundation
+1. ResourceInventory, MarketListing
+2. Basic Port economic layer
+3. Resource management
+
+#### Phase 4: Zone System
+1. Full Zone functionality
+2. ZoneHierarchy, ResourceFlow
+3. Team and governance features
+
+#### Phase 5: Meta-Governance
+1. MetaRole system
+2. Laws and Republic economic layers
+3. Innovation process
+
+### 4. Critical Relationships to Implement First
+
+1. **User → VirtueMetrics** (1:1)
+   - Central to the happiness tracking system
+   - Drives all recommendations and progression
+
+2. **User → ArtMastery → Art** (many:many)
+   - The core "Pokédex" collection mechanic
+   - Foundation of user progression
+
+3. **Zone → ZoneMembership → User** (many:many)
+   - Establishes where users can participate
+   - Creates community structure
+
+4. **Art → Experience → ExperienceInstance** (one:many:many)
+   - Connects collectible arts to activities
+   - Drives the gameplay loop
+
+### 5. Technical Architecture Recommendations
+
+1. **API Layer**
+   - RESTful or GraphQL API for all models
+   - Authentication middleware for user-specific data
+   - Geospatial endpoints for map-based features
+
+2. **Business Logic Layer**
+   - Service modules for happiness calculations
+   - Matrix flow processors for experiences
+   - Economic system handlers
+
+3. **Real-time Features**
+   - WebSockets for zone activities and raids
+   - Push notifications for events and opportunities
+   - Location updates for AR features
+
+4. **AI Integration**
+   - LLM API for AI guide interactions
+   - Recommendation engine for goals and arts
+   - Content verification for artifact submissions
+
+### 6. Integration with Existing Projects
+
+1. **User Authentication**
+   - Map existing user system to EudaimoniaGo User model
+   - Create missing fields for VirtueMetrics
+
+2. **Geographic Integration**
+   - Use existing map data to define initial Zones
+   - Map real locations to game coordinates
+
+3. **Content Migration**
+   - Convert existing learning content to Art structure
+   - Maintain IDs and relationships when possible
+
+4. **Progressive Feature Enabling**
+   - Implement feature flags to enable functionality gradually
+   - Define dependencies between features
+
+This document provides a comprehensive blueprint for implementing the EudaimoniaGo system with detailed model specifications and practical implementation guidance.

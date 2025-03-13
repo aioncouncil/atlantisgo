@@ -1,0 +1,524 @@
+# EudaimoniaGo: Complete Virtue Scoring System
+
+## Core Models and Relationships
+
+### 1. VirtueMetrics
+```javascript
+{
+  id: "UUID",
+  entityId: "UUID",               // References User or Zone
+  entityType: "Enum(User, Zone, Campus)",
+  
+  // Top level metric
+  happiness: {
+    currentValue: Float(0-100),
+    optimalRange: {min: Float, max: Float},  // Typically 40-60
+    trend: Float,                 // Recent change direction
+  },
+  
+  // Second level metrics (The 3 Goods)
+  divineGood: {                   // Justice
+    currentValue: Float(0-100),
+    optimalRange: {min: Float, max: Float},
+    trend: Float,
+  },
+  materialGood: {                 // Beauty
+    currentValue: Float(0-100),
+    optimalRange: {min: Float, max: Float},
+    trend: Float,
+  },
+  mixedGood: {                    // Glory
+    currentValue: Float(0-100),
+    optimalRange: {min: Float, max: Float},
+    trend: Float,
+  },
+  
+  // Third level metrics (The 9 Virtues)
+  wisdom: {
+    currentValue: Float(0-100),
+    optimalRange: {min: Float, max: Float},
+    trend: Float,
+    customMetrics: [UUID],        // References CustomMetric
+  },
+  temperance: {
+    currentValue: Float(0-100),
+    optimalRange: {min: Float, max: Float},
+    trend: Float,
+    customMetrics: [UUID],
+  },
+  courage: {
+    currentValue: Float(0-100),
+    optimalRange: {min: Float, max: Float},
+    trend: Float,
+    customMetrics: [UUID],
+  },
+  strength: {
+    currentValue: Float(0-100),
+    optimalRange: {min: Float, max: Float},
+    trend: Float,
+    customMetrics: [UUID],
+  },
+  endurance: {
+    currentValue: Float(0-100),
+    optimalRange: {min: Float, max: Float},
+    trend: Float,
+    customMetrics: [UUID],
+  },
+  health: {
+    currentValue: Float(0-100),
+    optimalRange: {min: Float, max: Float},
+    trend: Float,
+    customMetrics: [UUID],
+  },
+  friendships: {
+    currentValue: Float(0-100),
+    optimalRange: {min: Float, max: Float},
+    trend: Float,
+    customMetrics: [UUID],
+  },
+  resources: {
+    currentValue: Float(0-100),
+    optimalRange: {min: Float, max: Float},
+    trend: Float,
+    customMetrics: [UUID],
+  },
+  honors: {
+    currentValue: Float(0-100),
+    optimalRange: {min: Float, max: Float},
+    trend: Float,
+    customMetrics: [UUID],
+  },
+  
+  // Balance preferences
+  balancePreferences: {
+    presentFutureBalance: Float(0-100),  // 0=present focus, 100=future focus
+    divineToMaterialRatio: Float(0-100), // Balance between soul and body
+    individualToSocialRatio: Float(0-100) // Balance between self and community
+  },
+  
+  // Historical data for visualization
+  history: [
+    {
+      timestamp: Date,
+      metrics: Object  // Snapshot of all metrics at this time
+    }
+  ],
+  
+  wealthClass: Integer(1-4),     // Calculated field
+  lastUpdated: Timestamp
+}
+```
+
+### 2. CustomMetric
+```javascript
+{
+  id: "UUID",
+  name: "String",
+  description: "Text",
+  parentVirtue: "Enum(wisdom, courage, etc.)",
+  ownerEntityId: "UUID",         // User/Zone that created this metric
+  ownerEntityType: "Enum(User, Zone, Campus)",
+  valueType: "Enum(Numeric, Boolean, Range, Categorical)",
+  
+  // For numeric metrics
+  currentValue: Float,
+  targetValue: Float,
+  
+  // For range metrics
+  currentRange: {min: Float, max: Float},
+  targetRange: {min: Float, max: Float},
+  
+  // For boolean metrics
+  currentState: Boolean,
+  targetState: Boolean,
+  
+  // For categorical metrics
+  currentCategory: "String",
+  targetCategory: "String",
+  possibleCategories: ["String"],
+  
+  isPublic: Boolean,
+  popularity: Integer,           // How many others have adopted this metric
+  verificationMethod: "Text",    // How to verify progress
+  requiredArts: [UUID],          // Arts needed to improve this metric
+  relatedExperiences: [UUID],    // Experiences that improve this metric
+  lastUpdated: Timestamp,
+  createdAt: Timestamp
+}
+```
+
+### 3. ArtVirtueContribution
+```javascript
+{
+  id: "UUID",
+  artId: "UUID",                 // Reference to Art
+  
+  // Contribution to each virtue (positive or negative)
+  virtueContributions: {
+    wisdom: Float(-10 to 10),
+    temperance: Float(-10 to 10),
+    courage: Float(-10 to 10),
+    strength: Float(-10 to 10),
+    endurance: Float(-10 to 10),
+    health: Float(-10 to 10),
+    friendships: Float(-10 to 10),
+    resources: Float(-10 to 10),
+    honors: Float(-10 to 10)
+  },
+  
+  // Contribution to balance preferences
+  balanceContributions: {
+    presentFutureBalance: Float(-10 to 10),
+    divineToMaterialRatio: Float(-10 to 10),
+    individualToSocialRatio: Float(-10 to 10)
+  },
+  
+  // Which custom metrics this art can improve
+  customMetricContributions: [
+    {
+      metricId: "UUID",
+      contributionValue: Float(-10 to 10)
+    }
+  ],
+  
+  masteryThresholds: [
+    {
+      level: Integer(1-100),     // Mastery level required
+      multiplier: Float          // Multiplier for contributions at this level
+    }
+  ],
+  
+  lastUpdated: Timestamp
+}
+```
+
+### 4. DesiredGood
+```javascript
+{
+  id: "UUID",
+  ownerEntityId: "UUID",         // User or Zone
+  ownerEntityType: "Enum(User, Zone, Campus)",
+  name: "String",
+  description: "Text",
+  category: "Enum(Present, Future, Mixed)",
+  
+  // Which virtues this good improves
+  virtueTargets: {
+    wisdom: {value: Float, priority: Integer(1-10)},
+    temperance: {value: Float, priority: Integer(1-10)},
+    // etc. for all 9 virtues
+  },
+  
+  // Current progress
+  currentProgress: Float(0-100),
+  
+  // Arts and experiences needed
+  requiredArts: [UUID],
+  suggestedExperiences: [UUID],
+  
+  // Who else wants this good
+  popularity: Integer,
+  
+  // Whether this good is public or private
+  isPublic: Boolean,
+  
+  // Overall priority
+  priority: Integer(1-10),
+  
+  // Whether AI recommended this good
+  isRecommended: Boolean,
+  
+  createdAt: Timestamp,
+  lastUpdated: Timestamp
+}
+```
+
+### 5. ArtMetrics
+```javascript
+{
+  id: "UUID",
+  artId: "UUID",                 // Reference to Art
+  userId: "UUID",                // Reference to User
+  
+  // Overall mastery (calculated from parts)
+  overallMastery: Float(0-100),
+  
+  // Five parts mastery
+  definitionMastery: Float(0-100),
+  endMastery: Float(0-100),
+  partsMastery: Float(0-100),
+  matterMastery: Float(0-100),
+  instrumentMastery: Float(0-100),
+  
+  // Practice metrics
+  practiceCount: Integer,
+  practiceTime: Integer,         // Total minutes
+  practiceHistory: [
+    {
+      timestamp: Date,
+      duration: Integer,        // Minutes
+      masteryGained: Float
+    }
+  ],
+  
+  // Last practiced
+  lastPracticed: Timestamp,
+  
+  createdAt: Timestamp,
+  lastUpdated: Timestamp
+}
+```
+
+### 6. VirtueTransactionLog
+```javascript
+{
+  id: "UUID",
+  entityId: "UUID",              // User or Zone affected
+  entityType: "Enum(User, Zone, Campus)",
+  transactionType: "Enum(ArtPractice, Experience, ResourceExchange, ZoneActivity, CustomUpdate)",
+  sourceId: "UUID",              // ID of the source (Art, Experience, etc.)
+  sourceType: "String",          // Type of source
+  
+  // Changes to virtues
+  virtueChanges: {
+    wisdom: Float,
+    temperance: Float,
+    courage: Float,
+    // etc. for all virtues
+  },
+  
+  // Changes to custom metrics
+  customMetricChanges: [
+    {
+      metricId: "UUID",
+      change: Float
+    }
+  ],
+  
+  // Explanation for the transaction
+  description: "Text",
+  
+  timestamp: Timestamp
+}
+```
+
+### 7. ZoneVirtueAggregation
+```javascript
+{
+  id: "UUID",
+  zoneId: "UUID",                // Reference to Zone
+  
+  // How member virtues affect zone virtues
+  memberContributionWeights: {
+    byRank: [
+      {rank: 1, weight: Float},
+      {rank: 2, weight: Float},
+      {rank: 3, weight: Float},
+      {rank: 4, weight: Float}
+    ],
+    byRole: [
+      {role: "String", weight: Float}
+    ]
+  },
+  
+  // How zone-specific metrics affect zone virtues
+  zoneMetricContributions: [
+    {
+      metricId: "UUID",          // Reference to CustomMetric
+      virtueContributions: {
+        wisdom: Float,
+        temperance: Float,
+        // etc. for all virtues
+      }
+    }
+  ],
+  
+  // Last calculation
+  lastCalculated: Timestamp,
+  
+  // Calculation frequency (in minutes)
+  calculationFrequency: Integer
+}
+```
+
+### 8. WealthClassCalculation
+```javascript
+{
+  id: "UUID",
+  entityId: "UUID",              // User or Zone
+  entityType: "Enum(User, Zone)",
+  
+  // Base formula for wealth class
+  baseFormula: "String",         // E.g. "floor(mixedGood/25)+1"
+  
+  // Thresholds for each class
+  thresholds: [
+    {class: 1, minValue: Float},
+    {class: 2, minValue: Float},
+    {class: 3, minValue: Float},
+    {class: 4, minValue: Float}
+  ],
+  
+  // Modifiers from specific virtues
+  virtueModifiers: [
+    {virtue: "String", modifier: Float}
+  ],
+  
+  // Modifiers from zone relationships
+  zoneModifiers: [
+    {zoneId: "UUID", modifier: Float}
+  ],
+  
+  // Current calculation result
+  currentClass: Integer(1-4),
+  
+  // History of calculations
+  classHistory: [
+    {timestamp: Date, class: Integer}
+  ],
+  
+  lastCalculated: Timestamp
+}
+```
+
+## Calculation Formulas & Relationships
+
+### Virtue Hierarchy Calculations
+
+1. **Happiness Calculation**:
+```
+Happiness = (w1 * divineGood + w2 * materialGood + w3 * mixedGood) / (w1 + w2 + w3)
+```
+Where w1, w2, w3 are weights derived from balancePreferences.
+
+2. **Divine Good Calculation**:
+```
+divineGood = (wisdom + temperance + courage) / 3
+```
+
+3. **Material Good Calculation**:
+```
+materialGood = (strength + endurance + health) / 3
+```
+
+4. **Mixed Good Calculation**:
+```
+mixedGood = (friendships + resources + honors) / 3
+```
+
+5. **Virtue from Arts Calculation**:
+```
+virtueValue = baseValue + sum(artContribution * artMasteryMultiplier for each mastered art)
+```
+
+6. **Custom Metric Contribution**:
+```
+customMetricContribution = (currentValue / targetValue) * weight
+```
+
+### Wealth Class Calculation
+
+**Base Formula**:
+```
+wealthClass = min(max(floor((mixedGood + honorBonus) / 25) + 1, 1), 4)
+```
+
+**Zone Output Calculation**:
+```
+zoneOutput = baseZoneValue * zoneRankMultiplier * sum(memberContributions)
+```
+
+**Resource Distribution**:
+```
+individualShare = (zoneOutput/3) * (individualRank/totalRankPoints)
+zoneShare = zoneOutput/3
+templeShare = zoneOutput/3
+```
+
+### Virtue Balance System
+
+**Optimal Range Calculation**:
+```
+optimalRange = {
+  min: baseMin + personalPreferenceModifier,
+  max: baseMax + personalPreferenceModifier
+}
+```
+
+**Diminishing Returns**:
+```
+effectiveVirtue = 
+  if virtue < optimalRange.min:
+    virtue * (1 - ((optimalRange.min - virtue) / optimalRange.min) * 0.5)
+  else if virtue > optimalRange.max:
+    optimalRange.max + (virtue - optimalRange.max) * 0.5
+  else:
+    virtue
+```
+
+## Key Relationships
+
+1. **User → VirtueMetrics** (1:1)
+   - Each user has one VirtueMetrics record
+   - Primary relationship for tracking personal development
+
+2. **Zone → VirtueMetrics** (1:1)
+   - Each zone has one VirtueMetrics record
+   - Used for zone evaluation and resource allocation
+
+3. **Campus → VirtueMetrics** (1:1)
+   - The overall campus has one VirtueMetrics record
+   - Aggregates zone virtues for global metrics
+
+4. **VirtueMetrics → CustomMetric** (1:many)
+   - Each virtue can have multiple custom metrics under it
+   - Allows for detailed tracking of specific goals
+
+5. **Art → ArtVirtueContribution** (1:1)
+   - Each art has defined contributions to various virtues
+   - Enables the "catching arts improves virtues" mechanic
+
+6. **User → ArtMetrics → Art** (many:many)
+   - Tracks mastery of arts by users
+   - Core Pokémon-like collection mechanic
+
+7. **User/Zone → DesiredGood** (1:many)
+   - Users and zones can define multiple desired goods
+   - These drive recommendations for arts and experiences
+
+8. **VirtueTransaction** → All entities
+   - Logs all changes to virtue metrics
+   - Enables historical tracking and analysis
+
+9. **Zone → ZoneVirtueAggregation** (1:1)
+   - Defines how member virtues affect zone virtues
+   - Critical for zone performance calculation
+
+10. **User/Zone → WealthClassCalculation** (1:1)
+    - Determines economic access and privileges
+    - Affects resource distribution
+
+## Implementation Notes
+
+1. **Balance Rather Than Maximization**:
+   - Virtues have optimal ranges rather than maximum values
+   - Going over the optimal range yields diminishing returns
+   - Different player types may have different optimal ranges
+
+2. **Aggregation From Individual To Zone**:
+   - Zone virtues are weighted aggregates of member virtues
+   - Higher-ranked members have more influence on zone virtues
+   - Zone-specific metrics also contribute to zone virtues
+
+3. **Economic System Integration**:
+   - Mixed Good (especially honors) heavily influences wealth class
+   - Zone output is distributed in thirds to zones, players, and temples
+   - Player share is based on their rank relative to other zone members
+
+4. **Virtuous Cycle**:
+   - Catching and mastering arts improves virtues
+   - Improved virtues enable access to better zones and experiences
+   - Better zones and experiences yield more resources
+   - More resources enable mastering of more advanced arts
+
+This virtue scoring system implements Plato's philosophical concepts in a gamified way that mirrors Pokémon Go's accessibility while maintaining philosophical depth. It creates clear progression paths and makes virtuous development both fun and meaningful.

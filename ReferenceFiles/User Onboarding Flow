@@ -1,0 +1,52 @@
+flowchart TD
+    A[App Installation] --> B[Welcome Screen]
+    B --> C{Account Creation}
+    
+    C -->|New User| D[Intro Video]
+    C -->|Returning User| L[Login]
+    L --> Z[Main Map]
+    
+    D --> E[Character Creation]
+    E --> F[Initial Virtue Assessment]
+    F --> G[First Power Gift]
+    
+    G --> H[Tutorial Quest]
+    
+    subgraph "Tutorial Quest Steps"
+        H --> H1[Map Navigation]
+        H1 --> H2[Finding a Power]
+        H2 --> H3[Capturing Power]
+        H3 --> H4[Using Tech Tree]
+        H4 --> H5[Simple Experience]
+        H5 --> H6[Visit a Zone]
+        H6 --> H7[Marketplace Visit]
+    end
+    
+    H7 --> I[Tutorial Completion]
+    I --> J[Reward Package]
+    J --> K[Guided Tour of Features]
+    
+    K --> Z
+    
+    subgraph "Contextual Tutorials"
+        Z --> M1[First Team Invitation]
+        Z --> M2[First Zone Control]
+        Z --> M3[First Raid]
+        Z --> M4[Economic Layer Transition]
+    end
+    
+    style A fill:#f9f,stroke:#333,stroke-width:2px
+    style Z fill:#bbf,stroke:#333,stroke-width:4px
+    style J fill:#bfb,stroke:#333,stroke-width:2px
+    
+    classDef initialPhase fill:#ffe6e6,stroke:#ff9999,stroke-width:1px
+    classDef tutorialPhase fill:#e6f7ff,stroke:#66c2ff,stroke-width:1px
+    classDef tutorialSteps fill:#e6f0ff,stroke:#99c2ff,stroke-width:1px
+    classDef rewardPhase fill:#e6ffe6,stroke:#99ff99,stroke-width:1px
+    classDef contextual fill:#fff5e6,stroke:#ffcc80,stroke-width:1px
+    
+    class A,B,C,D,E,F initialPhase
+    class G,H,I tutorialPhase
+    class H1,H2,H3,H4,H5,H6,H7 tutorialSteps
+    class J,K rewardPhase
+    class M1,M2,M3,M4 contextual

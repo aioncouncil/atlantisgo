@@ -1,0 +1,344 @@
+import React, { useState, useEffect } from 'react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { Calendar, Clock, Users, Zap, Award, DollarSign, Map, Shield, Activity } from 'lucide-react';
+
+// Mock data - would be fetched from API in real implementation
+const mockZoneData = {
+  id: "z-12345",
+  name: "Philosopher's Garden",
+  type: "Reflection",
+  sector: "Ornaments",
+  rank: 3,
+  rating: 4.7,
+  description: "A tranquil zone perfect for philosophical discussions and virtue development.",
+  controlledBy: "Plato's Academy",
+  controlledSince: "2025-02-15",
+  visitorsToday: 87,
+  currentVisitors: 12,
+  basePrice: 15,
+  income7d: 430,
+  resources: [
+    { name: "Wisdom", level: 85 },
+    { name: "Tranquility", level: 90 },
+    { name: "Knowledge", level: 75 },
+    { name: "Inspiration", level: 60 }
+  ],
+  availabilityCalendar: [
+    { date: "2025-03-13", status: "Available" },
+    { date: "2025-03-14", status: "Booked" },
+    { date: "2025-03-15", status: "Booked" },
+    { date: "2025-03-16", status: "Available" },
+    { date: "2025-03-17", status: "Available" },
+    { date: "2025-03-18", status: "Maintenance" },
+    { date: "2025-03-19", status: "Available" }
+  ],
+  revenueData: [
+    { day: "Mon", revenue: 50, visitors: 35 },
+    { day: "Tue", revenue: 60, visitors: 42 },
+    { day: "Wed", revenue: 45, visitors: 38 },
+    { day: "Thu", revenue: 80, visitors: 56 },
+    { day: "Fri", revenue: 95, visitors: 72 },
+    { day: "Sat", revenue: 65, visitors: 48 },
+    { day: "Sun", revenue: 35, visitors: 29 }
+  ],
+  popularTimes: [
+    { hour: "9am", traffic: 30 },
+    { hour: "10am", traffic: 45 },
+    { hour: "11am", traffic: 60 },
+    { hour: "12pm", traffic: 80 },
+    { hour: "1pm", traffic: 75 },
+    { hour: "2pm", traffic: 65 },
+    { hour: "3pm", traffic: 50 },
+    { hour: "4pm", traffic: 40 },
+    { hour: "5pm", traffic: 30 }
+  ],
+  amenities: ["Meditation Circles", "Scroll Library", "Reflective Pools", "Discussion Pavillions"]
+};
+
+const ZonePropertyManagement = () => {
+  const [activeTab, setActiveTab] = useState('overview');
+  const [priceMultiplier, setPriceMultiplier] = useState(1);
+  const [zone, setZone] = useState(mockZoneData);
+  
+  // This would fetch actual zone data in a real implementation
+  useEffect(() => {
+    // fetchZoneData(zoneId).then(data => setZone(data));
+  }, []);
+
+  const updatePrice = (multiplier) => {
+    setPriceMultiplier(multiplier);
+    // In real implementation, this would call an API to update the price
+    // updateZonePrice(zone.id, zone.basePrice * multiplier)
+  };
+
+  const getStatusColor = (status) => {
+    switch(status) {
+      case 'Available': return 'bg-green-100 text-green-800';
+      case 'Booked': return 'bg-blue-100 text-blue-800';
+      case 'Maintenance': return 'bg-amber-100 text-amber-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-lg shadow-lg overflow-hidden">
+      {/* Zone Header */}
+      <div className="p-6 bg-gradient-to-r from-indigo-500 to-purple-600 text-white">
+        <div className="flex justify-between items-start">
+          <div>
+            <h1 className="text-2xl font-bold">{zone.name}</h1>
+            <div className="flex items-center mt-1">
+              <span className="text-sm bg-white/20 px-2 py-1 rounded-full mr-2">{zone.sector} Sector</span>
+              <span className="text-sm bg-white/20 px-2 py-1 rounded-full mr-2">Rank {zone.rank}</span>
+              <div className="flex items-center ml-2">
+                <span className="text-yellow-300 mr-1">★</span>
+                <span className="text-sm">{zone.rating}</span>
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-col items-end">
+            <div className="bg-white/10 px-3 py-1 rounded-full text-sm flex items-center">
+              <Shield className="w-4 h-4 mr-1" />
+              <span>Controlled by {zone.controlledBy}</span>
+            </div>
+            <div className="text-xs mt-1 opacity-80">Since {zone.controlledSince}</div>
+          </div>
+        </div>
+      </div>
+      
+      {/* Navigation Tabs */}
+      <div className="flex border-b">
+        <button
+          className={`px-4 py-2 text-sm font-medium ${activeTab === 'overview' ? 'border-b-2 border-indigo-500 text-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}
+          onClick={() => setActiveTab('overview')}
+        >
+          Overview
+        </button>
+        <button
+          className={`px-4 py-2 text-sm font-medium ${activeTab === 'bookings' ? 'border-b-2 border-indigo-500 text-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}
+          onClick={() => setActiveTab('bookings')}
+        >
+          Bookings
+        </button>
+        <button
+          className={`px-4 py-2 text-sm font-medium ${activeTab === 'analytics' ? 'border-b-2 border-indigo-500 text-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}
+          onClick={() => setActiveTab('analytics')}
+        >
+          Analytics
+        </button>
+        <button
+          className={`px-4 py-2 text-sm font-medium ${activeTab === 'management' ? 'border-b-2 border-indigo-500 text-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}
+          onClick={() => setActiveTab('management')}
+        >
+          Management
+        </button>
+        <button
+          className={`px-4 py-2 text-sm font-medium ${activeTab === 'resources' ? 'border-b-2 border-indigo-500 text-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}
+          onClick={() => setActiveTab('resources')}
+        >
+          Resources
+        </button>
+      </div>
+      
+      {/* Content Area */}
+      <div className="p-6">
+        {activeTab === 'overview' && (
+          <div className="space-y-6">
+            <p className="text-gray-600">{zone.description}</p>
+            
+            {/* Stats Cards Row */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <div className="flex items-center">
+                  <Users className="w-5 h-5 text-indigo-500 mr-2" />
+                  <span className="text-sm font-medium text-gray-500">Today's Visitors</span>
+                </div>
+                <div className="mt-2">
+                  <span className="text-2xl font-bold">{zone.visitorsToday}</span>
+                  <span className="text-sm text-green-500 ml-2">+12%</span>
+                </div>
+              </div>
+              
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <div className="flex items-center">
+                  <Clock className="w-5 h-5 text-indigo-500 mr-2" />
+                  <span className="text-sm font-medium text-gray-500">Current Visitors</span>
+                </div>
+                <div className="mt-2">
+                  <span className="text-2xl font-bold">{zone.currentVisitors}</span>
+                  <span className="text-xs text-gray-500 ml-2">of 25 capacity</span>
+                </div>
+              </div>
+              
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <div className="flex items-center">
+                  <DollarSign className="w-5 h-5 text-indigo-500 mr-2" />
+                  <span className="text-sm font-medium text-gray-500">7-Day Revenue</span>
+                </div>
+                <div className="mt-2">
+                  <span className="text-2xl font-bold">{zone.income7d}</span>
+                  <span className="text-xs text-gray-500 ml-2">coins</span>
+                </div>
+              </div>
+              
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <div className="flex items-center">
+                  <Award className="w-5 h-5 text-indigo-500 mr-2" />
+                  <span className="text-sm font-medium text-gray-500">Zone Rank</span>
+                </div>
+                <div className="mt-2">
+                  <span className="text-2xl font-bold">{zone.rank}</span>
+                  <span className="text-xs text-blue-500 ml-2">Top 15%</span>
+                </div>
+              </div>
+            </div>
+            
+            {/* Amenities */}
+            <div>
+              <h3 className="text-lg font-medium text-gray-900 mb-3">Zone Amenities</h3>
+              <div className="flex flex-wrap gap-2">
+                {zone.amenities.map((amenity, index) => (
+                  <span key={index} className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm">
+                    {amenity}
+                  </span>
+                ))}
+              </div>
+            </div>
+            
+            {/* Resources */}
+            <div>
+              <h3 className="text-lg font-medium text-gray-900 mb-3">Zone Resources</h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {zone.resources.map((resource, index) => (
+                  <div key={index} className="bg-gray-50 p-4 rounded-lg">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="font-medium text-gray-700">{resource.name}</span>
+                      <span className="text-sm text-indigo-600">{resource.level}%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2.5">
+                      <div className="bg-indigo-600 h-2.5 rounded-full" style={{ width: `${resource.level}%` }}></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            
+            {/* Weekly Revenue Chart */}
+            <div>
+              <h3 className="text-lg font-medium text-gray-900 mb-3">Weekly Performance</h3>
+              <div className="h-72 bg-white rounded-lg p-4 border">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={zone.revenueData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="day" />
+                    <YAxis yAxisId="left" orientation="left" />
+                    <YAxis yAxisId="right" orientation="right" />
+                    <Tooltip />
+                    <Legend />
+                    <Line yAxisId="left" type="monotone" dataKey="revenue" stroke="#8884d8" activeDot={{ r: 8 }} name="Revenue (coins)" />
+                    <Line yAxisId="right" type="monotone" dataKey="visitors" stroke="#82ca9d" name="Visitors" />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {activeTab === 'bookings' && (
+          <div className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h3 className="text-lg font-medium text-gray-900">Upcoming Bookings</h3>
+              <button className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700">
+                Create New Booking
+              </button>
+            </div>
+            
+            <div className="bg-white border rounded-lg overflow-hidden">
+              <div className="grid grid-cols-7 gap-px bg-gray-200">
+                {zone.availabilityCalendar.map((day, index) => (
+                  <div key={index} className="bg-white p-3">
+                    <div className="text-sm font-medium text-gray-900">{day.date.split('-')[2]}</div>
+                    <div className={`mt-2 text-xs font-medium rounded-full px-2 py-1 text-center ${getStatusColor(day.status)}`}>
+                      {day.status}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            
+            <div>
+              <h3 className="text-lg font-medium text-gray-900 mb-3">Popular Times</h3>
+              <div className="bg-white border rounded-lg p-4">
+                <div className="flex items-end h-40">
+                  {zone.popularTimes.map((time, index) => (
+                    <div key={index} className="flex-1 flex flex-col items-center">
+                      <div className="w-full bg-indigo-500 rounded-t" style={{ height: `${time.traffic}%` }}></div>
+                      <div className="text-xs mt-2 text-gray-600">{time.hour}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            
+            <div>
+              <h3 className="text-lg font-medium text-gray-900 mb-3">Pricing Settings</h3>
+              <div className="bg-white border rounded-lg p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <span className="text-gray-700">Base Price</span>
+                  <span className="font-bold">{zone.basePrice} coins</span>
+                </div>
+                
+                <div className="mb-6">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Price Multiplier: {priceMultiplier}x
+                  </label>
+                  <input
+                    type="range"
+                    min="0.5"
+                    max="3"
+                    step="0.1"
+                    value={priceMultiplier}
+                    onChange={(e) => updatePrice(parseFloat(e.target.value))}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                  />
+                  <div className="flex justify-between text-xs text-gray-500 mt-1">
+                    <span>-50%</span>
+                    <span>Normal</span>
+                    <span>+200%</span>
+                  </div>
+                </div>
+                
+                <div className="bg-indigo-50 p-4 rounded-lg">
+                  <div className="text-sm text-gray-700 mb-2">Current visitor price:</div>
+                  <div className="text-2xl font-bold text-indigo-700">
+                    {Math.round(zone.basePrice * priceMultiplier)} coins
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {activeTab === 'analytics' && (
+          <div className="text-gray-700">
+            <p className="italic text-center py-4">Analytics content would go here</p>
+          </div>
+        )}
+        
+        {activeTab === 'management' && (
+          <div className="text-gray-700">
+            <p className="italic text-center py-4">Management content would go here</p>
+          </div>
+        )}
+        
+        {activeTab === 'resources' && (
+          <div className="text-gray-700">
+            <p className="italic text-center py-4">Resources content would go here</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default ZonePropertyManagement;

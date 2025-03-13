@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500">
+  <!-- Background -->
+  <rect width="800" height="500" fill="#f8f9fa" />
+  
+  <!-- Title -->
+  <text x="400" y="40" font-family="Arial, sans-serif" font-size="24" font-weight="bold" text-anchor="middle" fill="#212529">EudaimoniaGo Core Gameplay Loop</text>
+  
+  <!-- Flow Diagram -->
+  <!-- Circles for main actions -->
+  <circle cx="150" cy="200" r="80" fill="#70e000" opacity="0.8" stroke="#2d6a4f" stroke-width="3" />
+  <circle cx="400" cy="200" r="80" fill="#9d4edd" opacity="0.8" stroke="#3c096c" stroke-width="3" />
+  <circle cx="650" cy="200" r="80" fill="#f72585" opacity="0.8" stroke="#7209b7" stroke-width="3" />
+  <circle cx="270" cy="350" r="80" fill="#4cc9f0" opacity="0.8" stroke="#3a0ca3" stroke-width="3" />
+  <circle cx="530" cy="350" r="80" fill="#ffb703" opacity="0.8" stroke="#fb8500" stroke-width="3" />
+  
+  <!-- Text in circles -->
+  <text x="150" y="190" font-family="Arial, sans-serif" font-size="18" font-weight="bold" text-anchor="middle" fill="white">COLLECT</text>
+  <text x="150" y="210" font-family="Arial, sans-serif" font-size="14" text-anchor="middle" fill="white">Powers</text>
+  
+  <text x="400" y="190" font-family="Arial, sans-serif" font-size="18" font-weight="bold" text-anchor="middle" fill="white">COMPLETE</text>
+  <text x="400" y="210" font-family="Arial, sans-serif" font-size="14" text-anchor="middle" fill="white">Experiences</text>
+  
+  <text x="650" y="190" font-family="Arial, sans-serif" font-size="18" font-weight="bold" text-anchor="middle" fill="white">COMPETE</text>
+  <text x="650" y="210" font-family="Arial, sans-serif" font-size="14" text-anchor="middle" fill="white">Zone Raids</text>
+  
+  <text x="270" y="340" font-family="Arial, sans-serif" font-size="18" font-weight="bold" text-anchor="middle" fill="white">CONTROL</text>
+  <text x="270" y="360" font-family="Arial, sans-serif" font-size="14" text-anchor="middle" fill="white">Zones</text>
+  
+  <text x="530" y="340" font-family="Arial, sans-serif" font-size="18" font-weight="bold" text-anchor="middle" fill="white">COMMERCE</text>
+  <text x="530" y="360" font-family="Arial, sans-serif" font-size="14" text-anchor="middle" fill="white">Marketplace</text>
+  
+  <!-- Arrows connecting the circles -->
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="0" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#212529" />
+    </marker>
+  </defs>
+  
+  <line x1="220" y1="180" x2="330" y2="180" stroke="#212529" stroke-width="3" marker-end="url(#arrowhead)" />
+  <line x1="470" y1="180" x2="580" y2="180" stroke="#212529" stroke-width="3" marker-end="url(#arrowhead)" />
+  <line x1="630" y1="270" x2="590" y2="310" stroke="#212529" stroke-width="3" marker-end="url(#arrowhead)" />
+  <line x1="470" y1="350" x2="340" y2="350" stroke="#212529" stroke-width="3" marker-end="url(#arrowhead)" />
+  <line x1="210" y1="300" x2="150" y2="270" stroke="#212529" stroke-width="3" marker-end="url(#arrowhead)" />
+  
+  <!-- Player at center -->
+  <circle cx="400" cy="110" r="40" fill="#ff9e00" opacity="0.8" stroke="#fb8500" stroke-width="3" />
+  <text x="400" y="115" font-family="Arial, sans-serif" font-size="16" font-weight="bold" text-anchor="middle" fill="white">PLAYER</text>
+  
+  <!-- Arrows from Player -->
+  <line x1="370" y1="130" x2="190" y2="170" stroke="#212529" stroke-width="2" stroke-dasharray="5,5" />
+  <line x1="400" y1="150" x2="400" y2="170" stroke="#212529" stroke-width="2" stroke-dasharray="5,5" />
+  <line x1="430" y1="130" x2="610" y2="170" stroke="#212529" stroke-width="2" stroke-dasharray="5,5" />
+  
+  <!-- Progression labels -->
+  <text x="400" y="450" font-family="Arial, sans-serif" font-size="20" font-weight="bold" text-anchor="middle" fill="#212529">Progression: Rank → Abilities → Zone Access → Market Tiers</text>
+</svg>

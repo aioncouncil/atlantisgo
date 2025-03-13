@@ -1,0 +1,146 @@
+## Core Data Models
+
+### User System
+```
+User
+├── UserID (PK)
+├── Username
+├── Email
+├── Rank (1-4)
+├── EconomicLayer (Port, Laws, Republic)
+└── ...
+
+VirtueMetrics
+├── UserID (FK)
+├── Happiness
+├── Soul Virtues (Wisdom, Courage, Temperance, Justice)
+├── Body Virtues (Strength, Health, Beauty, Endurance)
+└── VirtueHistory
+```
+
+### Art System
+```
+Art
+├── ArtID (PK)
+├── Name
+├── Category
+├── MatrixQuadrant
+├── Complexity
+├── Rarity
+├── UnlockConditions
+└── ...
+
+ArtParts
+├── ArtID (FK)
+├── PartType (Definition, End, Parts, Matter, Instrument)
+├── Content
+└── VerificationCriteria
+
+ArtMastery
+├── UserID (FK)
+├── ArtID (FK)
+├── OverallLevel
+├── ComponentLevels (for each part)
+└── VirtueContributions
+```
+
+### Experience System
+```
+Experience
+├── ExperienceID (PK)
+├── Name
+├── Type (Quest, Challenge, Collaboration, etc.)
+├── MatrixFlow (sequence of quadrants)
+├── PrimaryArtID (FK)
+├── SupportingArtIDs
+├── Rewards
+└── ...
+
+ExperienceInstance
+├── ExperienceID (FK)
+├── HostID (FK)
+├── ParticipantIDs
+├── Status
+├── CurrentPhase
+└── ResourcesAllocated
+```
+
+### Zone System
+```
+Zone
+├── ZoneID (PK)
+├── Name
+├── SectorID (FK)
+├── Type
+├── Coordinates
+├── ControllingTeamID
+├── CurrentMatrixQuadrant
+├── RankLevel
+└── ...
+
+Sector
+├── SectorID (PK)
+├── Name
+├── Type (12 types from Plato)
+├── ZoneCount
+└── GovernanceModel
+
+ZoneMembership
+├── UserID (FK)
+├── ZoneID (FK)
+├── Role
+├── PermissionLevel
+└── ContributionMetrics
+```
+
+### Economic System
+```
+ResourceInventory
+├── OwnerID
+├── OwnerType (User, Zone, Team)
+├── Resources
+├── Currency
+└── EconomicLayer
+
+MarketListing
+├── SellerID
+├── ItemType
+├── ReferenceID
+├── Price
+├── EconomicLayer
+└── Status
+```
+
+### Social System
+```
+Team
+├── TeamID (PK)
+├── Name
+├── FounderUserID (FK)
+├── MemberIDs
+├── PrimaryZoneID
+└── Roles
+
+SocialConnection
+├── UserID (FK)
+├── ConnectedUserID (FK)
+├── ConnectionType
+└── Status
+```
+
+### AI Guide System
+```
+UserGoal
+├── UserID (FK)
+├── Title
+├── TargetVirtues
+├── RecommendedArts
+├── Progress
+└── Milestones
+
+HappinessRecommendation
+├── UserID (FK)
+├── TargetDeficiency
+├── SuggestedAction
+└── PredictedImpact
+```

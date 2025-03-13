@@ -1,0 +1,50 @@
+gantt
+    title EudaimoniaGo Development Roadmap
+    dateFormat  YYYY-MM-DD
+    section Foundation
+    Project Setup           :a1, 2025-03-15, 15d
+    Core Data Models        :a2, after a1, 30d
+    Authentication System   :a3, after a1, 20d
+    Basic API Framework     :a4, after a3, 25d
+    
+    section Phase 1: Art System
+    Art Models              :p1_1, after a2, 20d
+    User Virtues System     :p1_2, after a2, 25d
+    Art Acquisition Logic   :p1_3, after p1_1, 15d
+    Basic Map Interface     :p1_4, after a4, 30d
+    
+    section Phase 2: Experience Engine
+    Experience Models       :p2_1, after p1_3, 20d
+    Experience Flow Logic   :p2_2, after p2_1, 25d
+    Artifact Creation       :p2_3, after p2_1, 20d
+    Virtue Integration      :p2_4, after p1_2, 15d
+    
+    section Phase 3: Economic System
+    Resource Models         :p3_1, after p2_2, 15d
+    Port Economic Layer     :p3_2, after p3_1, 25d
+    Market Interface        :p3_3, after p3_2, 20d
+    Transaction System      :p3_4, after p3_3, 15d
+    
+    section Phase 4: Zone System
+    Zone Models             :p4_1, after p1_4, 20d
+    Zone Governance         :p4_2, after p4_1, 25d
+    Team Features           :p4_3, after p4_2, 20d
+    Zone Raids              :p4_4, after p4_3, 15d
+    
+    section Phase 5: Advanced
+    Meta-Role System        :p5_1, after p4_2, 20d
+    Laws Economic Layer     :p5_2, after p3_4, 25d
+    Innovation Process      :p5_3, after p5_1, 30d
+    Republic Economic Layer :p5_4, after p5_2, 25d
+    
+    section Integration
+    Mobile App Integration  :i1, after p3_3, 40d
+    AR Features             :i2, after i1, 30d
+    Web Dashboard           :i3, after p3_3, 35d
+    Analytics System        :i4, after i3, 20d
+    
+    section Testing & Launch
+    Alpha Testing           :t1, after i1, 30d
+    Beta Testing            :t2, after t1, 45d
+    Performance Optimization:t3, after t2, 20d
+    Launch Preparation      :t4, after t3, 15d

@@ -1,0 +1,79 @@
+graph TB
+    subgraph "Client Applications"
+        A1[Mobile App] 
+        A2[Web Dashboard]
+    end
+    
+    subgraph "API Gateway"
+        B[Express + GraphQL + REST]
+    end
+    
+    subgraph "Real-time Layer"
+        C1[Socket.io Server]
+        C2[Redis Pub/Sub]
+        C3[Real-time Manager]
+    end
+    
+    subgraph "Session Management"
+        D1[User Sessions]
+        D2[Room Manager]
+        D3[Zone Tracker]
+    end
+    
+    subgraph "Game Mechanics"
+        E1[Raid Engine]
+        E2[Collaboration System]
+        E3[Event Manager]
+        E4[Team Actions]
+    end
+    
+    subgraph "State Persistence"
+        F1[MongoDB]
+        F2[Redis Cache]
+    end
+    
+    %% Connections
+    A1 -->|REST/GraphQL| B
+    A2 -->|REST/GraphQL| B
+    A1 -->|WebSocket| C1
+    A2 -->|WebSocket| C1
+    
+    B -->|Authentication| D1
+    B -->|Data Operations| F1
+    
+    C1 -->|Subscribe/Publish| C2
+    C2 -->|Event Broadcasting| C3
+    C3 -->|Room Management| D2
+    C3 -->|Zone Updates| D3
+    
+    D2 -->|Raid Sessions| E1
+    D2 -->|Collaboration Sessions| E2
+    D3 -->|Location Updates| E3
+    D3 -->|Team Presence| E4
+    
+    E1 -->|State Updates| F1
+    E2 -->|State Updates| F1
+    E3 -->|State Updates| F1
+    E4 -->|State Updates| F1
+    
+    E1 -->|Cache| F2
+    E2 -->|Cache| F2
+    E3 -->|Cache| F2
+    E4 -->|Cache| F2
+    
+    F2 -->|Persistence| F1
+
+    %% Styles
+    classDef clientApps fill:#f9f7f7,stroke:#577590,stroke-width:2px
+    classDef apiGateway fill:#f8961e,stroke:#577590,stroke-width:2px
+    classDef realTime fill:#f3722c,stroke:#577590,stroke-width:2px
+    classDef sessions fill:#f94144,stroke:#577590,stroke-width:2px
+    classDef mechanics fill:#90be6d,stroke:#577590,stroke-width:2px
+    classDef persistence fill:#43aa8b,stroke:#577590,stroke-width:2px
+    
+    class A1,A2 clientApps
+    class B apiGateway
+    class C1,C2,C3 realTime
+    class D1,D2,D3 sessions
+    class E1,E2,E3,E4 mechanics
+    class F1,F2 persistence

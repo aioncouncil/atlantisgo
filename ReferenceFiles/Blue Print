@@ -1,0 +1,1211 @@
+# EudaimoniaGo: Complete Application Blueprint
+
+## I. DATA MODELS
+
+### Additional Core Models
+
+### User System
+
+#### 1. User
+```
+id: UUID
+username: String
+email: String
+password: String (hashed)
+avatar: ImageReference
+dateJoined: Timestamp
+lastActive: Timestamp
+rank: Integer (1-4)
+economicLayer: Enum(Port, Laws, Republic)
+tutorialProgress: JSON
+deviceSettings: JSON
+createdAt: Timestamp
+updatedAt: Timestamp
+```
+
+#### 2. VirtueMetrics
+```
+id: UUID
+userId: UUID -> User
+happiness: Float (0-100)
+goodScore: Float (0-100)
+prosperityScore: Float (0-100)
+wisdom: Float (0-100)
+courage: Float (0-100)
+temperance: Float (0-100)
+justice: Float (0-100)
+strength: Float (0-100)
+health: Float (0-100)
+beauty: Float (0-100)
+endurance: Float (0-100)
+virtueHistory: JSON (time-series data)
+lastCalculated: Timestamp
+createdAt: Timestamp
+updatedAt: Timestamp
+```
+
+#### 3. UserPreferences
+```
+id: UUID
+userId: UUID -> User
+interfaceSettings: JSON
+notificationPreferences: JSON
+privacySettings: JSON
+aiGuideSettings: JSON
+languagePreference: String
+accessibilityOptions: JSON
+createdAt: Timestamp
+updatedAt: Timestamp
+```
+
+#### 4. UserLocation
+```
+id: UUID
+userId: UUID -> User
+latitude: Float
+longitude: Float
+currentZoneId: UUID -> Zone
+previousZoneIds: Array[UUID] -> Zone
+lastUpdated: Timestamp
+accuracyMeters: Float
+deviceId: String
+```
+
+### Art System (Core Pokédex)
+
+#### 5. Art
+```
+id: UUID
+name: String
+description: Text
+category: String -> Sector
+subcategory: String
+complexity: Integer (1-100)
+rarity: Enum(Common, Uncommon, Rare, Epic, Legendary)
+matrixQuadrant: Enum(SoulOut, SoulIn, BodyOut, BodyIn)
+isComposite: Boolean
+requiredArts: Array[UUID] -> Art
+unlockConditions: JSON
+economicValue: Float
+captureChallenge: JSON
+iconAsset: ImageReference
+spawnFrequency: Float
+createdAt: Timestamp
+updatedAt: Timestamp
+isOfficial: Boolean
+creatorId: UUID -> User (null if system-created)
+```
+
+#### 6. ArtParts
+```
+id: UUID
+artId: UUID -> Art
+partType: Enum(Definition, End, Parts, Matter, Instrument)
+content: Text
+mediaReferences: Array[UUID] -> MediaAsset
+verificationCriteria: JSON
+aiPrompts: Text
+createdAt: Timestamp
+updatedAt: Timestamp
+```
+
+#### 7. ArtMastery
+```
+id: UUID
+userId: UUID -> User
+artId: UUID -> Art
+overallLevel: Float (0-100)
+definitionLevel: Float (0-100)
+endLevel: Float (0-100)
+partsLevel: Float (0-100)
+matterLevel: Float (0-100)
+instrumentLevel: Float (0-100)
+practiceCount: Integer
+lastPracticed: Timestamp
+virtueContributions: JSON (mapping to virtue gains)
+notes: Text
+isPublic: Boolean
+createdAt: Timestamp
+updatedAt: Timestamp
+```
+
+#### 8. ArtStage
+```
+id: UUID
+artId: UUID -> Art
+sequenceOrder: Integer
+name: String
+description: Text
+duration: String (estimated time)
+completionCriteria: JSON
+resourceRequirements: JSON
+verificationMethod: JSON
+createdAt: Timestamp
+updatedAt: Timestamp
+```
+
+#### 9. UserArtStageProgress
+```
+id: UUID
+userId: UUID -> User
+artId: UUID -> Art
+stageId: UUID -> ArtStage
+startTime: Timestamp
+completionTime: Timestamp
+status: Enum(NotStarted, InProgress, Submitted, Verified, Failed)
+evidence: Array[UUID] -> MediaAsset
+feedback: Text
+verifiedBy: UUID -> User (can be null for system verification)
+createdAt: Timestamp
+updatedAt: Timestamp
+```
+
+#### 10. TechTree
+```
+id: UUID
+name: String
+description: Text
+nodes: JSON (array of Art IDs with positions)
+connections: JSON (links between nodes with requirements)
+progressionPaths: JSON (suggested learning sequences)
+categories: JSON (groupings of nodes)
+version: Integer
+isDefault: Boolean
+createdAt: Timestamp
+updatedAt: Timestamp
+```
+
+#### 11. UserTechTreeProgress
+```
+id: UUID
+userId: UUID -> User
+techTreeId: UUID -> TechTree
+unlockedNodes: Array[UUID] -> Art
+currentFocus: Array[UUID] -> Art
+completionPercentage: Float
+milestones: JSON
+createdAt: Timestamp
+updatedAt: Timestamp
+```
+
+### Experience System
+
+#### 12. Experience
+```
+id: UUID
+name: String
+description: Text
+type: Enum(Quest, Challenge, Collaboration, Innovation, Reflection)
+difficulty: Integer (1-100)
+duration: String (estimated time)
+primaryArtId: UUID -> Art
+supportingArtIds: Array[UUID] -> Art
+matrixFlow: Array[Enum(SoulOut, SoulIn, BodyOut, BodyIn)]
+phases: JSON (details of phases)
+rewards: JSON
+verificationMethod: JSON
+economicModel: Enum(Port, Laws, Republic)
+availabilityConditions: JSON
+requiredRank: Integer
+locationRequirements: JSON
+minParticipants: Integer
+maxParticipants: Integer
+repeatable: Boolean
+cooldownPeriod: Integer (hours)
+createdAt: Timestamp
+updatedAt: Timestamp
+creatorId: UUID -> User (null if system-created)
+```
+
+#### 13. ExperienceInstance
+```
+id: UUID
+experienceId: UUID -> Experience
+hostId: UUID -> User
+participantIds: Array[UUID] -> User
+currentPhase: Integer
+scheduleStartTime: Timestamp
+actualStartTime: Timestamp
+completionTime: Timestamp
+status: Enum(Scheduled, InProgress, Completed, Failed, Abandoned)
+phaseProgress: JSON
+submissions: Array[UUID] -> Artifact
+verificationStatus: JSON
+feedback: JSON
+resourcesAllocated: JSON
+zoneId: UUID -> Zone (if zone-specific)
+createdAt: Timestamp
+updatedAt: Timestamp
+```
+
+#### 14. Artifact
+```
+id: UUID
+name: String
+creatorId: UUID -> User
+experienceInstanceId: UUID -> ExperienceInstance
+type: String
+description: Text
+content: JSON/Text
+mediaAssets: Array[UUID] -> MediaAsset
+reviews: JSON
+economicValue: Float
+licensingTerms: JSON
+isPublic: Boolean
+createdAt: Timestamp
+updatedAt: Timestamp
+```
+
+#### 15. MediaAsset
+```
+id: UUID
+ownerId: UUID -> User
+type: Enum(Image, Video, Audio, Document, 3DModel)
+url: String
+fileSize: Integer
+metadata: JSON
+thumbnailUrl: String
+tags: Array[String]
+permissions: JSON
+createdAt: Timestamp
+updatedAt: Timestamp
+```
+
+### Zone System
+
+#### 16. Zone
+```
+id: UUID
+name: String
+description: Text
+type: String
+sectorId: UUID -> Sector
+latitude: Float
+longitude: Float
+radius: Float
+controllingTeamId: UUID -> Team
+currentMatrixQuadrant: Enum(SoulOut, SoulIn, BodyOut, BodyIn)
+rankLevel: Integer (1-4)
+economicModel: Enum(Laws, Republic)
+activeEvents: Array[UUID] -> Event
+techTreeProgress: JSON
+visualTheme: JSON
+spawnableArts: Array[UUID] -> Art
+createdAt: Timestamp
+updatedAt: Timestamp
+```
+
+#### 17. Sector
+```
+id: UUID
+name: String
+description: Text
+type: Enum(Instruments, Defenses, Materials, Health, Ornaments, Vessels, Vehicles, Labor, Commerce, Scripts, Analysis, Direction)
+zoneCount: Integer (target: 420)
+governanceModel: JSON
+specialAbilities: JSON
+dominantVirtues: JSON
+createdAt: Timestamp
+updatedAt: Timestamp
+```
+
+#### 18. ZoneMembership
+```
+id: UUID
+userId: UUID -> User
+zoneId: UUID -> Zone
+role: String
+permissionLevel: Integer (1-5)
+joinDate: Timestamp
+contributionMetrics: JSON
+reputation: Float
+isActive: Boolean
+expiryDate: Timestamp (if temporary)
+createdAt: Timestamp
+updatedAt: Timestamp
+```
+
+#### 19. ZoneResources
+```
+id: UUID
+zoneId: UUID -> Zone
+resourceType: String
+quantity: Float
+quality: Float (1-100)
+accessibility: JSON (who can access and how)
+replenishRate: Float
+lastReplenished: Timestamp
+createdAt: Timestamp
+updatedAt: Timestamp
+```
+
+#### 20. ZoneActivity
+```
+id: UUID
+zoneId: UUID -> Zone
+type: Enum(ThinkTank, Production, Review, Resource)
+name: String
+description: Text
+participantIds: Array[UUID] -> User
+startTime: Timestamp
+endTime: Timestamp
+status: Enum(Scheduled, InProgress, Completed)
+outcomes: JSON
+resourcesUsed: JSON
+artifacts: Array[UUID] -> Artifact
+createdAt: Timestamp
+updatedAt: Timestamp
+```
+
+#### 21. ZoneRaid
+```
+id: UUID
+targetZoneId: UUID -> Zone
+attackingTeamId: UUID -> Team
+defendingTeamId: UUID -> Team
+challengeType: String
+startTime: Timestamp
+endTime: Timestamp
+currentScore: JSON
+status: Enum(Scheduled, InProgress, Completed)
+rewards: JSON
+participants: Array[UUID] -> User
+createdAt: Timestamp
+updatedAt: Timestamp
+```
+
+### Social System
+
+#### 22. Team
+```
+id: UUID
+name: String
+description: Text
+founderUserId: UUID -> User
+memberIds: Array[UUID] -> User
+roles: JSON (member role assignments)
+formationDate: Timestamp
+logo: ImageReference
+achievements: JSON
+primaryZoneId: UUID -> Zone (can be null)
+isPublic: Boolean
+joinRequirements: JSON
+createdAt: Timestamp
+updatedAt: Timestamp
+```
+
+#### 23. SocialConnection
+```
+id: UUID
+userId: UUID -> User
+connectedUserId: UUID -> User
+connectionType: Enum(Friend, Collaborator, Mentor, Mentee)
+status: Enum(Pending, Active, Blocked)
+startDate: Timestamp
+metrics: JSON (collaboration history)
+lastInteraction: Timestamp
+notes: Text
+createdAt: Timestamp
+updatedAt: Timestamp
+```
+
+#### 24. Message
+```
+id: UUID
+senderId: UUID -> User
+recipientId: UUID (User or Team)
+recipientType: Enum(User, Team)
+content: Text
+mediaAttachments: Array[UUID] -> MediaAsset
+readStatus: Boolean
+sentTime: Timestamp
+readTime: Timestamp
+createdAt: Timestamp
+updatedAt: Timestamp
+```
+
+#### 25. Notification
+```
+id: UUID
+userId: UUID -> User
+type: String
+content: JSON
+priority: Integer (1-5)
+readStatus: Boolean
+actionUrl: String
+relatedEntityId: UUID
+relatedEntityType: String
+createdAt: Timestamp
+updatedAt: Timestamp
+```
+
+### Economic System (Three-Layered)
+
+#### 26. ResourceInventory
+```
+id: UUID
+ownerId: UUID
+ownerType: Enum(User, Zone, Team)
+resources: JSON (detailed inventory with quantities)
+currency: JSON (different currency types and amounts)
+economicLayer: Enum(Port, Laws, Republic)
+lastTransaction: Timestamp
+totalValue: Float
+createdAt: Timestamp
+updatedAt: Timestamp
+```
+
+#### 27. Resource
+```
+id: UUID
+name: String
+description: Text
+type: String
+rarity: Enum(Common, Uncommon, Rare, Epic, Legendary)
+baseValue: Float
+properties: JSON
+usableWithArts: Array[UUID] -> Art
+durability: Float
+quantity: Float
+iconAsset: ImageReference
+physicsProperties: JSON (for simulation)
+createdAt: Timestamp
+updatedAt: Timestamp
+```
+
+#### 28. MarketListing
+```
+id: UUID
+sellerId: UUID
+sellerType: Enum(User, Zone, Team, System)
+itemType: String
+referenceId: UUID
+title: String
+description: Text
+price: Float
+currency: String
+economicLayer: Enum(Port, Laws, Republic)
+status: Enum(Active, Sold, Expired, Cancelled)
+expiryDate: Timestamp
+quantity: Integer
+tags: Array[String]
+mediaAssets: Array[UUID] -> MediaAsset
+createdAt: Timestamp
+updatedAt: Timestamp
+```
+
+#### 29. EconomicTransaction
+```
+id: UUID
+buyerId: UUID
+buyerType: Enum(User, Zone, Team)
+sellerId: UUID
+sellerType: Enum(User, Zone, Team, System)
+listingId: UUID -> MarketListing (can be null for direct transactions)
+amount: Float
+currency: String
+economicLayer: Enum(Port, Laws, Republic)
+transactionType: String
+status: Enum(Pending, Completed, Refunded, Disputed)
+transactionTime: Timestamp
+metadata: JSON
+createdAt: Timestamp
+updatedAt: Timestamp
+```
+
+#### 30. WealthClass
+```
+id: UUID
+userId: UUID -> User
+level: Integer (1-4)
+privileges: JSON
+responsibilities: JSON
+zoneAllocations: Array[UUID] -> Zone
+qualificationCriteria: JSON
+evaluationTime: Timestamp
+reviewerId: UUID -> User
+createdAt: Timestamp
+updatedAt: Timestamp
+```
+
+#### 31. CommonResource
+```
+id: UUID
+name: String
+description: Text
+resourceType: String
+quantity: Float
+quality: Float
+accessCriteria: JSON
+governanceVotes: JSON
+stewardIds: Array[UUID] -> User
+usageLog: JSON
+replenishmentSchedule: JSON
+createdAt: Timestamp
+updatedAt: Timestamp
+```
+
+#### 32. Project
+```
+id: UUID
+name: String
+description: Text
+initiatorId: UUID
+initiatorType: Enum(User, Zone, Team)
+status: Enum(Proposed, Funding, InProgress, Completed, Cancelled)
+fundingGoal: Float
+currentFunding: Float
+startDate: Timestamp
+endDate: Timestamp
+milestones: JSON
+economicModel: Enum(Port, Laws, Republic)
+contributorIds: Array[UUID] -> User
+artifacts: Array[UUID] -> Artifact
+zoneId: UUID -> Zone (if zone-specific)
+createdAt: Timestamp
+updatedAt: Timestamp
+```
+
+### AI Guide System
+
+#### 33. UserGoal
+```
+id: UUID
+userId: UUID -> User
+title: String
+description: Text
+targetVirtues: JSON (which virtues to improve)
+recommendedArts: Array[UUID] -> Art
+progress: Float (0-100)
+priority: Integer (1-10)
+startDate: Timestamp
+targetDate: Timestamp
+status: Enum(Active, Completed, Abandoned)
+milestones: JSON
+aiGenerated: Boolean
+parentGoalId: UUID -> UserGoal (for sub-goals)
+createdAt: Timestamp
+updatedAt: Timestamp
+```
+
+#### 34. AiInteraction
+```
+id: UUID
+userId: UUID -> User
+interactionType: String
+content: Text
+suggestions: JSON
+timestamp: Timestamp
+relatedEntities: JSON (Arts, Experiences, etc. referenced)
+sentiment: Float (-1.0 to 1.0)
+helpfulnessRating: Integer (1-5, user-provided)
+createdAt: Timestamp
+updatedAt: Timestamp
+```
+
+#### 35. HappinessRecommendation
+```
+id: UUID
+userId: UUID -> User
+recommendationType: String
+targetDeficiency: String (which virtue to improve)
+suggestedAction: JSON
+predictedImpact: Float
+generatedTime: Timestamp
+status: Enum(New, Viewed, Accepted, Rejected, Completed)
+outcome: JSON (actual results if implemented)
+aiConfidence: Float (0-100)
+createdAt: Timestamp
+updatedAt: Timestamp
+```
+
+### Game Mechanics System
+
+#### 36. Achievement
+```
+id: UUID
+name: String
+description: Text
+category: String
+difficulty: Integer (1-5)
+iconAsset: ImageReference
+requirements: JSON
+rewards: JSON
+isSecret: Boolean
+createdAt: Timestamp
+updatedAt: Timestamp
+```
+
+#### 37. UserAchievement
+```
+id: UUID
+userId: UUID -> User
+achievementId: UUID -> Achievement
+unlockDate: Timestamp
+progress: Float (0-100 for partial achievements)
+createdAt: Timestamp
+updatedAt: Timestamp
+```
+
+#### 38. Event
+```
+id: UUID
+name: String
+description: Text
+type: Enum(Festival, Tournament, Challenge, TechUnlock, ZoneRaid)
+startTime: Timestamp
+endTime: Timestamp
+status: Enum(Upcoming, Active, Completed, Cancelled)
+zoneIds: Array[UUID] -> Zone
+artIds: Array[UUID] -> Art
+experienceIds: Array[UUID] -> Experience
+requirements: JSON
+rewards: JSON
+participantIds: Array[UUID] -> User
+recurrencePattern: JSON
+createdAt: Timestamp
+updatedAt: Timestamp
+```
+
+#### 39. UserActivity
+```
+id: UUID
+userId: UUID -> User
+activityType: String
+entityId: UUID
+entityType: String
+details: JSON
+timestamp: Timestamp
+location: JSON (lat/long if relevant)
+createdAt: Timestamp
+updatedAt: Timestamp
+```
+
+#### 40. PhysicsSimulation
+```
+id: UUID
+name: String
+type: String
+entities: JSON (objects with physics properties)
+forces: JSON
+constraints: JSON
+iterationRate: Float
+visualEffects: JSON
+createdAt: Timestamp
+updatedAt: Timestamp
+```
+
+#### 41. ArtTaxonomy
+```
+id: UUID
+name: String
+level: Enum(Genus, Species, Instance)
+parentId: UUID -> ArtTaxonomy (null for genus level)
+description: Text
+artIds: Array[UUID] -> Art (arts belonging to this taxon)
+displayOrder: Integer
+iconAsset: ImageReference
+createdAt: Timestamp
+updatedAt: Timestamp
+```
+
+#### 42. ZoneHierarchy
+```
+id: UUID
+parentZoneId: UUID -> Zone
+childZoneId: UUID -> Zone
+relationshipType: Enum(Oversight, Advice, Resource, Protection)
+authorities: JSON (what the parent can do to the child)
+responsibilities: JSON (what the parent must do for the child)
+rotationSchedule: JSON (for implementing monthly rotation)
+createdAt: Timestamp
+updatedAt: Timestamp
+```
+
+#### 43. ResourceFlow
+```
+id: UUID
+sourceZoneId: UUID -> Zone
+destinationZoneId: UUID -> Zone
+resourceType: String
+quantity: Float
+frequency: String (daily, weekly, etc.)
+justification: Text
+requiresApproval: Boolean
+approvalAuthority: UUID -> Zone
+lastExecuted: Timestamp
+nextScheduled: Timestamp
+status: Enum(Active, Suspended, Terminated)
+createdAt: Timestamp
+updatedAt: Timestamp
+```
+
+#### 44. ArtProposal
+```
+id: UUID
+proposerId: UUID -> User
+name: String
+description: Text
+category: String
+subcategory: String
+taxonomyId: UUID -> ArtTaxonomy
+matrixQuadrant: Enum(SoulOut, SoulIn, BodyOut, BodyIn)
+justification: Text
+deficiencyAddressed: Text
+draftParts: JSON (all five parts)
+reviewStatus: Enum(Proposed, InReview, Approved, Rejected)
+reviewerIds: Array[UUID] -> User
+comments: JSON
+createdAt: Timestamp
+updatedAt: Timestamp
+```
+
+#### 45. ZoneDeficiency
+```
+id: UUID
+zoneId: UUID -> Zone
+deficiencyType: String
+description: Text
+impactMetrics: JSON
+detectionMethod: String
+proposedSolutions: JSON
+status: Enum(Detected, Acknowledged, Addressing, Resolved)
+createdAt: Timestamp
+updatedAt: Timestamp
+```
+
+#### 46. MetaRole
+```
+id: UUID
+name: String
+description: Text
+governanceLevel: Integer (1-4)
+requiredVirtues: JSON
+primaryMatrixQuadrant: Enum(SoulOut, SoulIn, BodyOut, BodyIn)
+associatedArts: Array[UUID] -> Art
+responsibilities: JSON
+createdAt: Timestamp
+updatedAt: Timestamp
+```
+
+#### 47. MetaRoleAssignment
+```
+id: UUID
+userId: UUID -> User
+metaRoleId: UUID -> MetaRole
+primaryZoneId: UUID -> Zone
+influencedZoneIds: Array[UUID] -> Zone
+assignmentMethod: Enum(Election, Appointment, Achievement, Rotation)
+startDate: Timestamp
+endDate: Timestamp
+currentStatus: Enum(Active, Inactive, Probationary)
+performanceMetrics: JSON
+createdAt: Timestamp
+updatedAt: Timestamp
+```
+
+#### 48. InnovationProcess
+```
+id: UUID
+name: String
+initiatorId: UUID -> User
+zoneId: UUID -> Zone
+innovationType: String
+currentStage: Enum(Order, Arrangement, Eurythmy, Symmetry, Propriety, Economy)
+stageProgress: JSON (tracking progress in each stage)
+artifacts: Array[UUID] -> Artifact
+participantIds: Array[UUID] -> User
+problemStatement: Text
+proposedSolution: Text
+validationMetrics: JSON
+status: Enum(InProgress, Completed, Failed)
+createdAt: Timestamp
+updatedAt: Timestamp
+```
+
+## II. RELATIONSHIPS BETWEEN MODELS
+
+### Core Relationships
+
+1. **User and Arts** (Pokédex Core)
+   - User -> ArtMastery (1:many): User masters multiple arts
+   - Art -> ArtParts (1:many): Each art has 5 parts
+   - Art -> ArtStage (1:many): Arts have sequential stages
+   - User -> UserArtStageProgress (1:many): Users progress through stages
+   - Art -> ArtTaxonomy (many:1): Arts belong to taxonomic categories
+   - ArtTaxonomy -> ArtTaxonomy (many:1): Hierarchical relationship from genus to species to instance
+
+2. **Happiness System**
+   - User -> VirtueMetrics (1:1): Each user has one set of metrics
+   - ArtMastery -> VirtueMetrics (many:1): Mastering arts impacts virtues
+   - UserGoal -> VirtueMetrics (many:1): Goals target specific virtues
+   - Experience -> VirtueMetrics (many:1): Experiences impact virtues
+
+3. **Experience System**
+   - Art -> Experience (1:many): Arts are used in experiences
+   - User -> ExperienceInstance (many:many): Users participate in experiences
+   - ExperienceInstance -> Artifact (1:many): Experiences produce artifacts
+   - Zone -> ExperienceInstance (1:many): Experiences occur in zones
+
+4. **Zone System**
+   - Sector -> Zone (1:many): Sectors contain multiple zones
+   - Zone -> ZoneMembership (1:many): Users join zones
+   - Zone -> ZoneActivity (1:many): Activities occur in zones
+   - Zone -> ZoneResources (1:many): Zones contain resources
+   - Team -> Zone (many:many): Teams control zones
+
+5. **Economic System**
+   - User/Zone/Team -> ResourceInventory (1:1): Entities own resources
+   - MarketListing -> EconomicTransaction (1:many): Listings become transactions
+   - User -> WealthClass (1:1): Users belong to wealth classes (Laws model)
+   - CommonResource -> User (many:many): Users access common resources (Republic model)
+   - Zone -> ResourceFlow (1:many): Regular resource movements between zones
+   - Zone -> ZoneHierarchy (many:many): Constitutional oversight relationships
+
+6. **AI Guide System**
+   - User -> UserGoal (1:many): AI sets goals for users
+   - User -> AiInteraction (1:many): Users interact with AI
+   - VirtueMetrics -> HappinessRecommendation (1:many): AI recommends based on metrics
+   - Zone -> ZoneDeficiency (1:many): System identifies zone problems
+   - User -> ArtProposal (1:many): Users propose new arts to address deficiencies
+
+7. **Meta-Governance System**
+   - User -> MetaRoleAssignment (1:many): Users occupy philosophical roles
+   - MetaRole -> MetaRoleAssignment (1:many): Roles assigned to users
+   - Zone -> MetaRoleAssignment (many:many): Zones influenced by meta-roles
+   - Zone -> InnovationProcess (1:many): Zones conduct structured innovation
+
+### Complex Art Relationships
+
+1. **Taxonomic Structure** (Genus/Species/Instance):
+   - ArtTaxonomy represents hierarchical classification:
+     * Genus: Broad category (e.g., "Cooking")
+     * Species: Specialized branch (e.g., "Baking")
+     * Instance: Specific implementation (e.g., "Red Velvet Cake Baking")
+   - Arts reference their taxonomic position
+   - New arts can be proposed within established taxonomy
+
+2. **Composite Arts** (like Angler from Sophist):
+   - Art with isComposite=true
+   - requiredArts field links to component Arts
+   - Experiences requiring multiple Art masteries
+
+3. **Dependent Arts**:
+   - Represented in TechTree connections
+   - Unlocks governed by UserTechTreeProgress
+
+4. **Cooperative Arts**:
+   - Experience with minParticipants > 1
+   - Each participant brings different required Arts
+
+5. **Meta-Arts** (Philosopher, Statesman, Sophist):
+   - Represented through MetaRole model
+   - Users assigned these roles through MetaRoleAssignment
+   - Each role has specific responsibilities and jurisdictions
+   - Philosopher: Categorization and principle-setting (SoulOut)
+   - Statesman: Measurement and resource allocation (SoulIn)
+   - Sophist: Implementation and team leadership (BodyOut)
+   - Craftsman: Production and execution (BodyIn)
+
+### Economic Layer Integration
+
+1. **Port City Layer** (Traditional Economy):
+   - MarketListing with economicLayer="Port"
+   - EconomicTransaction with external users
+
+2. **Laws Model** (5040 Zones):
+   - Zone with economicModel="Laws"
+   - WealthClass determining resource access
+   - ZoneMembership linking users to zones
+
+3. **Republic Model** (Common Ownership):
+   - Zone with economicModel="Republic"
+   - CommonResource shared based on merit
+   - Experience with economicModel="Republic"
+
+## III. APPLICATION SCREENS
+
+### 1. Entry & Login Screens
+- **Welcome Screen**
+  - App introduction
+  - Login/Registration options
+  - Latest news carousel
+  - Models: User (authentication)
+
+- **Registration Flow**
+  - Basic information
+  - Initial virtue assessment (VirtueMetrics)
+  - AI guide introduction (AiInteraction)
+  - Models: User, VirtueMetrics, UserPreferences
+
+- **Tutorial Screens**
+  - Core gameplay introduction
+  - Matrix concept explanation
+  - First art capture
+  - Models: Art, ArtMastery, UserActivity
+
+### 2. Main Map Screen
+- **World Map**
+  - NERV-styled AR overlay
+  - Interactive zones (Zone)
+  - Collectible arts (Art) appearing as glowing icons
+  - User location (UserLocation)
+  - Other players (nearby Users)
+  - Event indicators (Event)
+  - Models: WorldMap, Zone, Art, UserLocation, Event
+
+- **HUD Elements**
+  - Happiness meter (VirtueMetrics)
+  - Current zone info (Zone)
+  - Quick access menu (UIConfiguration)
+  - Notifications indicator (Notification)
+  - Matrix phase indicator (current SoulOut/In/BodyOut/In)
+  - Models: VirtueMetrics, Zone, Notification
+
+### 3. Arts Lexicon Screen (Pokédex)
+- **Collection View**
+  - Grid/list of arts with mastery indicators
+  - Filtering by category, mastery, matrix quadrant
+  - Search functionality
+  - Models: Art, ArtMastery, Sector
+
+- **Art Detail View**
+  - Five parts display (Definition, End, Parts, Matter, Instrument)
+  - Mastery progress bars
+  - Stages of practice
+  - Media gallery of artifacts
+  - Related arts
+  - Practice button
+  - Models: Art, ArtParts, ArtMastery, ArtStage, Artifact
+
+- **Practice Interface**
+  - Stage-by-stage guidance
+  - Submission tools
+  - Verification interface
+  - Models: ArtStage, UserArtStageProgress, MediaAsset
+
+### 4. Experience Engine Screen
+- **Experience Browser**
+  - Available experiences list
+  - Filtering options
+  - Recommended experiences (AI-suggested)
+  - Models: Experience, Art, ArtMastery
+
+- **Experience Detail**
+  - Description and requirements
+  - Matrix flow visualization
+  - Resource allocation interface
+  - Participant slots
+  - Start/schedule buttons
+  - Models: Experience, ResourceInventory, ExperienceInstance
+
+- **Active Experience View**
+  - Phase indicators (Soul Out → Body Out → Soul In → Body In)
+  - Task instructions
+  - Collaboration tools
+  - Submission interface
+  - Timer/progress tracking
+  - Models: ExperienceInstance, Artifact, PhysicsSimulation
+
+### 5. Zone Management Screen
+- **Zone Overview**
+  - Control status
+  - Current matrix phase indicator
+  - Member list
+  - Resource levels
+  - Upcoming events
+  - Models: Zone, ZoneMembership, ZoneResources, Event
+
+- **Think Tank Interface** (Soul Out)
+  - Idea board
+  - Voting system
+  - Planning tools
+  - Project tracker
+  - Models: ZoneActivity, Project, Artifact
+
+- **Production Interface** (Body Out)
+  - Active projects
+  - Resource allocation
+  - Progress tracking
+  - Quality control
+  - Models: ZoneActivity, ZoneResources, Project
+
+- **Review Interface** (Soul In)
+  - Submission reviews
+  - Governance voting
+  - Performance metrics
+  - Models: ZoneActivity, Artifact
+
+- **Resource Exchange** (Body In)
+  - Resource pools
+  - Distribution controls
+  - Transaction history
+  - Models: ZoneResources, ResourceInventory, EconomicTransaction
+
+### 6. Profile Dashboard
+- **Personal Stats**
+  - Virtue metrics with visualizations
+  - Rank information
+  - Achievement badges
+  - Activity history
+  - Models: User, VirtueMetrics, UserAchievement, UserActivity
+
+- **Goals & Progress**
+  - Current goals
+  - Recommended next steps
+  - Progress timelines
+  - Models: UserGoal, HappinessRecommendation
+
+- **Artifacts Gallery**
+  - Created works
+  - Collaborations
+  - Models: Artifact, MediaAsset
+
+- **Settings**
+  - Profile customization
+  - Notification preferences
+  - AI guide settings
+  - Interface options
+  - Models: User, UserPreferences
+
+### 7. Tech Tree Screen
+- **Tree Visualization**
+  - Network graph of arts
+  - Mastery status indicators
+  - Locked/unlocked status
+  - Focus path highlighter
+  - Models: TechTree, Art, ArtMastery, UserTechTreeProgress
+
+- **Detail Panel**
+  - Prerequisites
+  - Unlocks
+  - Mastery requirements
+  - Fast-track options
+  - Models: Art, TechTree
+
+### 8. Resource Management Screen
+- **Inventory**
+  - Resource categories
+  - Usage history
+  - Crafting options
+  - Models: ResourceInventory, Resource, EconomicTransaction
+
+- **Market Interface**
+  - Browse listings
+  - Create listings
+  - Transaction history
+  - Models: MarketListing, EconomicTransaction
+
+- **Economic Layer Status**
+  - Current layer indicator
+  - Progression requirements
+  - Layer-specific opportunities
+  - Models: User (economicLayer), WealthClass, CommonResource
+
+### 9. Social & Teams Screen
+- **Connections**
+  - Friends list
+  - Team memberships
+  - Collaboration history
+  - Mentorship tracking
+  - Models: SocialConnection, Team, Message
+
+- **Team Management**
+  - Team formation
+  - Role assignments
+  - Team challenges
+  - Zone control status
+  - Models: Team, ZoneMembership, ZoneRaid
+
+- **Communication**
+  - Messaging interface
+  - Activity feed
+  - Event planning
+  - Models: Message, UserActivity, Event
+
+### 10. AI Guide Interface
+- **Conversation View**
+  - Chat interface with AI guide
+  - Contextual suggestions
+  - Question answering
+  - Models: AiInteraction, UserGoal
+
+- **Happiness Analysis**
+  - Detailed virtue breakdown
+  - Improvement suggestions
+  - Personalized roadmap
+  - Models: VirtueMetrics, HappinessRecommendation
+
+- **Art Recommendations**
+  - Suggested arts to learn
+  - Balancing considerations
+  - Complementary pairings
+  - Models: Art, ArtMastery, UserGoal
+
+### 11. Events & Calendar Screen
+- **Events List**
+  - Upcoming events
+  - Active events
+  - Historical records
+  - Models: Event, UserActivity
+
+- **Festival Details**
+  - Description and theme
+  - Participation options
+  - Rewards
+  - Models: Event, Experience
+
+- **Zone Raids**
+  - Upcoming raids
+  - Team formation
+  - Strategy planning
+  - Models: ZoneRaid, Team
+
+### 12. Store & Economic Screen
+- **Port City Store** (External Layer)
+  - Product categories
+  - Service offerings
+  - Project funding opportunities
+  - Models: MarketListing, Project
+
+- **Laws Economy Interface** (Middle Layer)
+  - Wealth class status
+  - Zone allocations
+  - Resource entitlements
+  - Models: WealthClass, ZoneMembership, ResourceInventory
+
+- **Republic Commons** (Inner Layer)
+  - Shared resources
+  - Governance participation
+  - Merit-based access
+  - Models: CommonResource, UserActivity
+
+## IV. IMPLEMENTATION CONSIDERATIONS
+
+### 1. Core Technical Requirements
+- Real-time geolocation for map functionality
+- AR capabilities for art capture and interactions
+- Physics engine integration for simulations
+- Secure economic transaction processing
+- AI integration for guide system
+
+### 2. Simplicity Focus
+- Despite complex backend, maintain Pokédex-like simplicity in UI
+- Progressive disclosure of features
+- Context-sensitive AI guidance
+- Clear paths to happiness improvement
+
+### 3. Scalability Planning
+- Start with limited zone count, expand to full 5040
+- Phased economic model implementation
+- Expandable art library through templates
+- User-generated content moderation systems
+
+### 4. Development Priorities
+1. Core Pokédex functionality (Arts collection)
+2. Happiness metrics and AI guide
+3. Experience engine
+4. Zone system
+5. Economic layers
+
+This blueprint provides a comprehensive overview of all the models, relationships, and screens required for the EudaimoniaGo application. It maintains the core simplicity of a Pokédex-style collection game while supporting the complex philosophical and economic underpinnings of the Aion project.

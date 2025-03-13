@@ -1,0 +1,1055 @@
+/**
+ * @file schema/index.ts
+ * @description Core schema definitions for EudaimoniaGo's real-time multiplayer system
+ * 
+ * This file defines the state synchronization schemas used by Colyseus.
+ * These schemas determine what data is automatically synchronized between
+ * the server and connected clients, providing the real-time foundation for
+ * the multiplayer experience.
+ * 
+ * @copyright EudaimoniaGo 2025
+ * @version 1.0.0
+ */
+
+import { Schema, type, MapSchema, ArraySchema, filter } from '@colyseus/schema';
+import { nanoid } from 'nanoid';
+
+/**
+ * Position within the game world
+ * Used for tracking entity locations and calculating proximity-based interactions
+ */
+export class Position extends Schema {
+  @type("number") x: number = 0;
+  @type("number") y: number = 0;
+  
+  /**
+   * Creates a new Position instance
+   * @param x - Longitude coordinate
+   * @param y - Latitude coordinate
+   */
+  constructor(x: number = 0, y: number = 0) {
+    super();
+    this.x = x;
+    this.y = y;
+  }
+  
+  /**
+   * Calculate distance to another position
+   * @param other - Position to calculate distance to
+   * @returns Distance in coordinate units (not meters)
+   */
+  distanceTo(other: Position): number {
+    const dx = this.x - other.x;
+    const dy = this.y - other.y;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+  
+  /**
+   * Update position from raw coordinates
+   * @param x - New longitude
+   * @param y - New latitude
+   */
+  update(x: number, y: number): void {
+    this.x = x;
+    this.y = y;
+  }
+  
+  /**
+   * Create a Position from geolocation coordinates
+   * @param latitude - Latitude value
+   * @param longitude - Longitude value
+   * @returns New Position instance
+   */
+  static fromGeoCoordinates(latitude: number, longitude: number): Position {
+    // We're using longitude as x and latitude as y for consistency
+    return new Position(longitude, latitude);
+  }
+  
+  /**
+   * Convert to GeoJSON point format
+   * @returns GeoJSON Point object
+   */
+  toGeoJson(): { type: string, coordinates: number[] } {
+    return {
+      type: "Point",
+      coordinates: [this.x, this.y]
+    };
+  }
+}
+
+/**
+ * SynchronizedCounter provides an atomic counter that safely synchronizes
+ * even with high update frequency
+ */
+export class SynchronizedCounter extends Schema {
+  @type("number") value: number = 0;
+  
+  /**
+   * Creates a new counter with initial value
+   * @param initialValue - Starting value for counter
+   */
+  constructor(initialValue: number = 0) {
+    super();
+    this.value = initialValue;
+  }
+  
+  /**
+   * Increment counter by specified amount
+   * @param amount - Amount to increment (default: 1)
+   * @returns New counter value
+   */
+  increment(amount: number = 1): number {
+    this.value += amount;
+    return this.value;
+  }
+  
+  /**
+   * Decrement counter by specified amount
+   * @param amount - Amount to decrement (default: 1)
+   * @returns New counter value
+   */
+  decrement(amount: number = 1): number {
+    this.value -= amount;
+    return this.value;
+  }
+  
+  /**
+   * Set counter to specific value
+   * @param value - New value for counter
+   */
+  set(value: number): void {
+    this.value = value;
+  }
+}
+
+/**
+ * UserMetadata contains minimal information about a user
+ * that needs to be shared with other players
+ */
+export class UserMetadata extends Schema {
+  @type("string") userId: string;
+  @type("string") username: string;
+  @type("number") rank: number = 1;
+  @type("string") avatarUrl: string = "";
+  
+  constructor(userId: string, username: string, rank: number = 1, avatarUrl: string = "") {
+    super();
+    this.userId = userId;
+    this.username = username;
+    this.rank = rank;
+    this.avatarUrl = avatarUrl;
+  }
+}
+
+/**
+ * VirtuePoints tracks a user's virtue levels in the game
+ */
+export class VirtuePoints extends Schema {
+  @type("number") wisdom: number = 0;
+  @type("number") courage: number = 0;
+  @type("number") temperance: number = 0;
+  @type("number") justice: number = 0;
+  @type("number") strength: number = 0;
+  
+  constructor(
+    wisdom: number = 0,
+    courage: number = 0,
+    temperance: number = 0,
+    justice: number = 0,
+    strength: number = 0
+  ) {
+    super();
+    this.wisdom = wisdom;
+    this.courage = courage;
+    this.temperance = temperance;
+    this.justice = justice;
+    this.strength = strength;
+  }
+  
+  /**
+   * Get total virtue points
+   * @returns Sum of all virtue points
+   */
+  get total(): number {
+    return this.wisdom + this.courage + this.temperance + this.justice + this.strength;
+  }
+  
+  /**
+   * Update all virtue values at once
+   * @param virtues - Object containing virtue values to update
+   */
+  updateAll(virtues: {
+    wisdom?: number,
+    courage?: number,
+    temperance?: number,
+    justice?: number,
+    strength?: number
+  }): void {
+    if (virtues.wisdom !== undefined) this.wisdom = virtues.wisdom;
+    if (virtues.courage !== undefined) this.courage = virtues.courage;
+    if (virtues.temperance !== undefined) this.temperance = virtues.temperance;
+    if (virtues.justice !== undefined) this.justice = virtues.justice;
+    if (virtues.strength !== undefined) this.strength = virtues.strength;
+  }
+}
+
+/**
+ * Represents a power's mastery level
+ */
+export class PowerMastery extends Schema {
+  @type("string") powerId: string;
+  @type("number") overall: number = 0;
+  @type("number") definition: number = 0;
+  @type("number") end: number = 0;
+  @type("number") parts: number = 0;
+  @type("number") matter: number = 0;
+  @type("number") instrument: number = 0;
+  @type("number") uses: number = 0;
+  @type("boolean") favorite: boolean = false;
+  
+  constructor(powerId: string) {
+    super();
+    this.powerId = powerId;
+  }
+  
+  /**
+   * Update overall mastery based on component values
+   * @returns New overall mastery value
+   */
+  updateOverall(): number {
+    this.overall = Math.round(
+      (this.definition + this.end + this.parts + this.matter + this.instrument) / 5
+    );
+    return this.overall;
+  }
+  
+  /**
+   * Practice a specific component to increase mastery
+   * @param component - Component to practice
+   * @param amount - Amount to increase (1-10 typical range)
+   * @returns New component mastery level
+   */
+  practice(
+    component: 'definition' | 'end' | 'parts' | 'matter' | 'instrument',
+    amount: number = 1
+  ): number {
+    // Cap amount to reasonable values
+    const safeAmount = Math.max(0, Math.min(10, amount));
+    
+    // Calculate new value, capped at 100
+    const newValue = Math.min(100, this[component] + safeAmount);
+    this[component] = newValue;
+    
+    // Increment usage counter
+    this.uses++;
+    
+    // Update overall mastery
+    this.updateOverall();
+    
+    return newValue;
+  }
+}
+
+/**
+ * Player schema represents an active player in the game world
+ * This is the core player state synchronized between server and clients
+ */
+export class Player extends Schema {
+  // Core identifiers
+  @type("string") id: string;
+  @type("string") sessionId: string;
+  @type(UserMetadata) metadata: UserMetadata;
+  
+  // Position and movement
+  @type(Position) position: Position = new Position();
+  @type("number") heading: number = 0;
+  @type("boolean") isMoving: boolean = false;
+  @type("number") lastMoveTime: number = 0;
+  
+  // Status and visibility
+  @type("string") status: string = "online";
+  @type("boolean") isVisible: boolean = true;
+  @type("string") currentZoneId: string = "";
+  @type("string") currentExperienceId: string = "";
+  
+  // Team information
+  @type("string") teamId: string = "";
+  @type("string") teamName: string = "";
+  
+  // Real-time activity
+  @type("string") currentActivity: string = "exploring";
+  @type("number") lastActivity: number = Date.now();
+  
+  constructor(id: string, sessionId: string, metadata: UserMetadata) {
+    super();
+    this.id = id;
+    this.sessionId = sessionId;
+    this.metadata = metadata;
+  }
+  
+  /**
+   * Update player position
+   * @param latitude - New latitude
+   * @param longitude - New longitude
+   * @param heading - New heading in degrees (optional)
+   */
+  updatePosition(latitude: number, longitude: number, heading?: number): void {
+    this.position.update(longitude, latitude);
+    this.lastMoveTime = Date.now();
+    
+    if (heading !== undefined) {
+      this.heading = heading;
+    }
+    
+    this.isMoving = true;
+    
+    // Reset move state after 3 seconds of inactivity
+    setTimeout(() => {
+      const timeSinceMove = Date.now() - this.lastMoveTime;
+      if (timeSinceMove >= 3000) {
+        this.isMoving = false;
+      }
+    }, 3000);
+  }
+  
+  /**
+   * Update player's current activity
+   * @param activity - Current activity description
+   * @param zoneId - Zone ID if applicable
+   * @param experienceId - Experience ID if applicable
+   */
+  updateActivity(activity: string, zoneId?: string, experienceId?: string): void {
+    this.currentActivity = activity;
+    this.lastActivity = Date.now();
+    
+    if (zoneId) {
+      this.currentZoneId = zoneId;
+    }
+    
+    if (experienceId) {
+      this.currentExperienceId = experienceId;
+    }
+  }
+  
+  /**
+   * Update team information
+   * @param teamId - Team ID
+   * @param teamName - Team name
+   */
+  updateTeam(teamId: string, teamName: string): void {
+    this.teamId = teamId;
+    this.teamName = teamName;
+  }
+}
+
+/**
+ * PowerSpawn represents a power that has spawned in the world
+ * and is available for collection
+ */
+export class PowerSpawn extends Schema {
+  @type("string") id: string;
+  @type("string") powerId: string;
+  @type("string") name: string;
+  @type("string") rarity: string;
+  @type("string") category: string;
+  @type("string") type: string;
+  @type(Position) position: Position;
+  @type("string") zoneId: string = "";
+  @type("number") spawnTime: number;
+  @type("number") despawnTime: number;
+  @type("number") captureChance: number = 0.8; // Base capture chance
+  @type(["string"]) capturedBy: ArraySchema<string> = new ArraySchema<string>();
+  
+  constructor(
+    powerId: string,
+    name: string,
+    rarity: string,
+    category: string,
+    type: string,
+    position: Position,
+    zoneId: string = "",
+    durationSeconds: number = 1800 // 30 minutes default
+  ) {
+    super();
+    this.id = nanoid(10);
+    this.powerId = powerId;
+    this.name = name;
+    this.rarity = rarity;
+    this.category = category;
+    this.type = type;
+    this.position = position;
+    this.zoneId = zoneId;
+    this.spawnTime = Date.now();
+    this.despawnTime = this.spawnTime + (durationSeconds * 1000);
+    
+    // Set base capture chance by rarity
+    switch (rarity) {
+      case 'Common':
+        this.captureChance = 0.8;
+        break;
+      case 'Uncommon':
+        this.captureChance = 0.6;
+        break;
+      case 'Rare':
+        this.captureChance = 0.4;
+        break;
+      case 'Epic':
+        this.captureChance = 0.2;
+        break;
+      case 'Legendary':
+        this.captureChance = 0.1;
+        break;
+    }
+  }
+  
+  /**
+   * Checks if the power has expired
+   * @returns Boolean indicating if power should despawn
+   */
+  isExpired(): boolean {
+    return Date.now() > this.despawnTime;
+  }
+  
+  /**
+   * Record a player capturing this power
+   * @param userId - ID of user capturing power
+   * @returns False if already captured by this user, true otherwise
+   */
+  markCaptured(userId: string): boolean {
+    if (this.capturedBy.includes(userId)) {
+      return false;
+    }
+    
+    this.capturedBy.push(userId);
+    return true;
+  }
+  
+  /**
+   * Check if a user has already captured this power
+   * @param userId - User ID to check
+   * @returns True if already captured by this user
+   */
+  isCapturedBy(userId: string): boolean {
+    return this.capturedBy.includes(userId);
+  }
+  
+  /**
+   * Get remaining time until despawn
+   * @returns Milliseconds until despawn (0 if expired)
+   */
+  getRemainingTime(): number {
+    const now = Date.now();
+    return Math.max(0, this.despawnTime - now);
+  }
+}
+
+/**
+ * ZoneState contains real-time information about a game zone
+ */
+export class ZoneState extends Schema {
+  @type("string") id: string;
+  @type("string") name: string;
+  @type("string") type: string;
+  @type("string") sectorId: string;
+  @type("string") sectorName: string;
+  @type("number") rank: number = 1;
+  @type(Position) center: Position;
+  @type("number") radius: number;
+  
+  // Control information
+  @type("string") controllingTeamId: string = "";
+  @type("string") controllingTeamName: string = "";
+  @type("number") controlSince: number = 0;
+  @type("number") contestedState: number = 0; // 0: not contested, 1-100: contest progress
+  
+  // Activity tracking
+  @type("number") activeUsers: number = 0;
+  @type(["string"]) presentUserIds: ArraySchema<string> = new ArraySchema<string>();
+  @type("number") lastActivity: number = 0;
+  
+  // Resource and status
+  @type("number") resourceLevel: number = 100;
+  @type("string") status: string = "active";
+  @type("string") currentEventId: string = "";
+  
+  constructor(
+    id: string,
+    name: string,
+    type: string,
+    sectorId: string,
+    sectorName: string,
+    center: Position,
+    radius: number,
+    rank: number = 1
+  ) {
+    super();
+    this.id = id;
+    this.name = name;
+    this.type = type;
+    this.sectorId = sectorId;
+    this.sectorName = sectorName;
+    this.center = center;
+    this.radius = radius;
+    this.rank = rank;
+  }
+  
+  /**
+   * Record user entering the zone
+   * @param userId - ID of user entering zone
+   */
+  userEnter(userId: string): void {
+    if (!this.presentUserIds.includes(userId)) {
+      this.presentUserIds.push(userId);
+      this.activeUsers = this.presentUserIds.length;
+      this.lastActivity = Date.now();
+    }
+  }
+  
+  /**
+   * Record user leaving the zone
+   * @param userId - ID of user leaving zone
+   */
+  userLeave(userId: string): void {
+    const index = this.presentUserIds.indexOf(userId);
+    if (index !== -1) {
+      this.presentUserIds.splice(index, 1);
+      this.activeUsers = this.presentUserIds.length;
+      this.lastActivity = Date.now();
+    }
+  }
+  
+  /**
+   * Check if a user is present in the zone
+   * @param userId - User ID to check
+   * @returns True if user is in the zone
+   */
+  isUserPresent(userId: string): boolean {
+    return this.presentUserIds.includes(userId);
+  }
+  
+  /**
+   * Update zone control information
+   * @param teamId - Controlling team ID
+   * @param teamName - Controlling team name
+   */
+  updateControl(teamId: string, teamName: string): void {
+    if (this.controllingTeamId !== teamId) {
+      this.controllingTeamId = teamId;
+      this.controllingTeamName = teamName;
+      this.controlSince = Date.now();
+      this.contestedState = 0;
+    }
+  }
+  
+  /**
+   * Set zone contested state during raids
+   * @param progress - Contest progress (0-100)
+   */
+  setContestedState(progress: number): void {
+    this.contestedState = Math.max(0, Math.min(100, progress));
+  }
+  
+  /**
+   * Check if a position is within this zone
+   * @param position - Position to check
+   * @returns True if position is within zone
+   */
+  containsPosition(position: Position): boolean {
+    return this.center.distanceTo(position) <= this.radius;
+  }
+  
+  /**
+   * Update zone resource level
+   * @param amount - New resource amount (0-100)
+   */
+  updateResourceLevel(amount: number): void {
+    this.resourceLevel = Math.max(0, Math.min(100, amount));
+  }
+}
+
+/**
+ * Raid represents an active zone raid in progress
+ */
+export class Raid extends Schema {
+  @type("string") id: string;
+  @type("string") type: string;
+  @type("string") status: string = "preparing"; // preparing, active, completed
+  @type("string") targetZoneId: string;
+  
+  // Teams
+  @type("string") attackingTeamId: string;
+  @type("string") attackingTeamName: string;
+  @type("string") defendingTeamId: string;
+  @type("string") defendingTeamName: string;
+  
+  // Participants by team
+  @type(["string"]) attackerIds: ArraySchema<string> = new ArraySchema<string>();
+  @type(["string"]) defenderIds: ArraySchema<string> = new ArraySchema<string>();
+  
+  // Timing
+  @type("number") preparationStartTime: number = 0;
+  @type("number") startTime: number = 0;
+  @type("number") endTime: number = 0;
+  @type("number") duration: number = 1800000; // 30 minutes default
+  
+  // Phases
+  @type("number") currentPhase: number = 0;
+  @type("number") totalPhases: number = 3;
+  @type("number") phaseStartTime: number = 0;
+  @type("number") phaseDuration: number = 300000; // 5 minutes default
+  
+  // Scoring
+  @type("number") attackerScore: number = 0;
+  @type("number") defenderScore: number = 0;
+  @type(["string"]) capturedPoints: ArraySchema<string> = new ArraySchema<string>();
+  
+  constructor(
+    targetZoneId: string,
+    attackingTeamId: string,
+    attackingTeamName: string,
+    defendingTeamId: string,
+    defendingTeamName: string
+  ) {
+    super();
+    this.id = nanoid(10);
+    this.type = "conquest"; // default type
+    this.targetZoneId = targetZoneId;
+    this.attackingTeamId = attackingTeamId;
+    this.attackingTeamName = attackingTeamName;
+    this.defendingTeamId = defendingTeamId;
+    this.defendingTeamName = defendingTeamName;
+    this.preparationStartTime = Date.now();
+  }
+  
+  /**
+   * Add a participant to the raid
+   * @param userId - User ID to add
+   * @param team - Team side ('attacker' or 'defender')
+   * @returns Boolean indicating success
+   */
+  addParticipant(userId: string, team: 'attacker' | 'defender'): boolean {
+    if (team === 'attacker') {
+      if (this.attackerIds.includes(userId)) return false;
+      this.attackerIds.push(userId);
+      return true;
+    } else {
+      if (this.defenderIds.includes(userId)) return false;
+      this.defenderIds.push(userId);
+      return true;
+    }
+  }
+  
+  /**
+   * Remove a participant from the raid
+   * @param userId - User ID to remove
+   * @returns Boolean indicating success
+   */
+  removeParticipant(userId: string): boolean {
+    let index = this.attackerIds.indexOf(userId);
+    if (index !== -1) {
+      this.attackerIds.splice(index, 1);
+      return true;
+    }
+    
+    index = this.defenderIds.indexOf(userId);
+    if (index !== -1) {
+      this.defenderIds.splice(index, 1);
+      return true;
+    }
+    
+    return false;
+  }
+  
+  /**
+   * Check which team a user belongs to in this raid
+   * @param userId - User ID to check
+   * @returns 'attacker', 'defender', or null if not participating
+   */
+  getUserTeam(userId: string): 'attacker' | 'defender' | null {
+    if (this.attackerIds.includes(userId)) return 'attacker';
+    if (this.defenderIds.includes(userId)) return 'defender';
+    return null;
+  }
+  
+  /**
+   * Start the raid
+   * @param phaseDurations - Array of phase durations in ms (optional)
+   */
+  start(phaseDurations?: number[]): void {
+    this.status = "active";
+    this.startTime = Date.now();
+    this.phaseStartTime = this.startTime;
+    this.currentPhase = 0;
+    
+    if (phaseDurations && phaseDurations.length > 0) {
+      this.totalPhases = phaseDurations.length;
+      this.phaseDuration = phaseDurations[0];
+      
+      // Calculate total duration from phases
+      this.duration = phaseDurations.reduce((sum, duration) => sum + duration, 0);
+    }
+    
+    this.endTime = this.startTime + this.duration;
+  }
+  
+  /**
+   * Advance to the next phase
+   * @param phaseDuration - Duration of new phase in ms (optional)
+   * @returns True if advanced, false if already at last phase
+   */
+  advancePhase(phaseDuration?: number): boolean {
+    if (this.currentPhase >= this.totalPhases - 1) {
+      return false;
+    }
+    
+    this.currentPhase++;
+    this.phaseStartTime = Date.now();
+    
+    if (phaseDuration) {
+      this.phaseDuration = phaseDuration;
+    }
+    
+    return true;
+  }
+  
+  /**
+   * Add points to a team's score
+   * @param team - Team to award points to
+   * @param points - Number of points to add
+   */
+  addPoints(team: 'attacker' | 'defender', points: number): void {
+    if (team === 'attacker') {
+      this.attackerScore += points;
+    } else {
+      this.defenderScore += points;
+    }
+  }
+  
+  /**
+   * End the raid and determine winner
+   * @returns Winning team ('attacker', 'defender', or 'tie')
+   */
+  end(): 'attacker' | 'defender' | 'tie' {
+    this.status = "completed";
+    this.endTime = Date.now();
+    
+    if (this.attackerScore > this.defenderScore) {
+      return 'attacker';
+    } else if (this.defenderScore > this.attackerScore) {
+      return 'defender';
+    } else {
+      return 'tie';
+    }
+  }
+  
+  /**
+   * Get current time remaining in phase
+   * @returns Milliseconds remaining in current phase
+   */
+  getPhaseTimeRemaining(): number {
+    const now = Date.now();
+    const phaseEnd = this.phaseStartTime + this.phaseDuration;
+    return Math.max(0, phaseEnd - now);
+  }
+  
+  /**
+   * Get total raid time remaining
+   * @returns Milliseconds remaining in raid
+   */
+  getTotalTimeRemaining(): number {
+    const now = Date.now();
+    return Math.max(0, this.endTime - now);
+  }
+  
+  /**
+   * Mark a point as captured
+   * @param pointId - ID of capture point
+   * @returns True if newly captured, false if already captured
+   */
+  capturePoint(pointId: string): boolean {
+    if (this.capturedPoints.includes(pointId)) {
+      return false;
+    }
+    
+    this.capturedPoints.push(pointId);
+    return true;
+  }
+}
+
+/**
+ * RealTimeEvent represents a short-lived event broadcast to nearby players
+ */
+export class RealTimeEvent extends Schema {
+  @type("string") id: string;
+  @type("string") type: string;
+  @type("string") sourceId: string; // User, team, or system ID that generated the event
+  @type("string") sourceType: string; // "user", "team", "system"
+  @type(Position) position: Position;
+  @type("number") radius: number; // Radius of effect in meters
+  @type("string") message: string;
+  @type("any") data: any; // Event-specific data
+  @type("number") createdAt: number;
+  @type("number") expiresAt: number;
+  
+  constructor(
+    type: string,
+    sourceId: string,
+    sourceType: string,
+    position: Position,
+    radius: number,
+    message: string,
+    data: any = {},
+    durationMs: number = 30000 // 30 seconds default
+  ) {
+    super();
+    this.id = nanoid(10);
+    this.type = type;
+    this.sourceId = sourceId;
+    this.sourceType = sourceType;
+    this.position = position;
+    this.radius = radius;
+    this.message = message;
+    this.data = data;
+    this.createdAt = Date.now();
+    this.expiresAt = this.createdAt + durationMs;
+  }
+  
+  /**
+   * Check if event has expired
+   * @returns True if event should be removed
+   */
+  isExpired(): boolean {
+    return Date.now() > this.expiresAt;
+  }
+  
+  /**
+   * Check if position is within event radius
+   * @param position - Position to check
+   * @returns True if within event radius
+   */
+  isInRange(position: Position): boolean {
+    return this.position.distanceTo(position) <= this.radius;
+  }
+}
+
+/**
+ * ExperienceSession represents an active experience with participants
+ */
+export class ExperienceSession extends Schema {
+  @type("string") id: string;
+  @type("string") experienceId: string;
+  @type("string") name: string;
+  @type("string") type: string;
+  @type("string") status: string = "scheduled"; // scheduled, in_progress, completed
+  @type("string") hostId: string;
+  @type("string") zoneId: string = "";
+  @type(Position) position: Position;
+  
+  // Timing
+  @type("number") scheduledStartTime: number;
+  @type("number") actualStartTime: number = 0;
+  @type("number") endTime: number = 0;
+  @type("number") estimatedDuration: number;
+  
+  // Phases
+  @type("number") currentPhase: number = 0;
+  @type("number") totalPhases: number;
+  @type("string") currentPhaseName: string = "";
+  @type("number") phaseStartTime: number = 0;
+  @type("number") phaseProgress: number = 0;
+  
+  // Participants
+  @type(["string"]) participantIds: ArraySchema<string> = new ArraySchema<string>();
+  @type("number") minParticipants: number;
+  @type("number") maxParticipants: number;
+  
+  constructor(
+    experienceId: string,
+    name: string,
+    type: string,
+    hostId: string,
+    position: Position,
+    scheduledStartTime: number,
+    estimatedDuration: number,
+    totalPhases: number,
+    minParticipants: number,
+    maxParticipants: number,
+    zoneId: string = ""
+  ) {
+    super();
+    this.id = nanoid(10);
+    this.experienceId = experienceId;
+    this.name = name;
+    this.type = type;
+    this.hostId = hostId;
+    this.position = position;
+    this.scheduledStartTime = scheduledStartTime;
+    this.estimatedDuration = estimatedDuration;
+    this.totalPhases = totalPhases;
+    this.minParticipants = minParticipants;
+    this.maxParticipants = maxParticipants;
+    this.zoneId = zoneId;
+    
+    // Add host as first participant
+    this.participantIds.push(hostId);
+  }
+  
+  /**
+   * Add participant to experience
+   * @param userId - User ID to add
+   * @returns True if added, false if already participating or at capacity
+   */
+  addParticipant(userId: string): boolean {
+    if (this.participantIds.includes(userId)) return false;
+    if (this.participantIds.length >= this.maxParticipants) return false;
+    
+    this.participantIds.push(userId);
+    return true;
+  }
+  
+  /**
+   * Remove participant from experience
+   * @param userId - User ID to remove
+   * @returns True if removed
+   */
+  removeParticipant(userId: string): boolean {
+    const index = this.participantIds.indexOf(userId);
+    if (index === -1) return false;
+    
+    // Cannot remove host if they're the only participant
+    if (userId === this.hostId && this.participantIds.length === 1) {
+      return false;
+    }
+    
+    this.participantIds.splice(index, 1);
+    
+    // If host left, assign new host
+    if (userId === this.hostId && this.participantIds.length > 0) {
+      this.hostId = this.participantIds[0];
+    }
+    
+    return true;
+  }
+  
+  /**
+   * Start the experience
+   */
+  start(): void {
+    if (this.status !== "scheduled") return;
+    if (this.participantIds.length < this.minParticipants) return;
+    
+    this.status = "in_progress";
+    this.actualStartTime = Date.now();
+    this.currentPhase = 0;
+    this.phaseStartTime = this.actualStartTime;
+    this.phaseProgress = 0;
+  }
+  
+  /**
+   * Update phase information
+   * @param phaseIndex - New phase index
+   * @param phaseName - New phase name
+   */
+  updatePhase(phaseIndex: number, phaseName: string): void {
+    this.currentPhase = phaseIndex;
+    this.currentPhaseName = phaseName;
+    this.phaseStartTime = Date.now();
+    this.phaseProgress = 0;
+  }
+  
+  /**
+   * Update phase progress
+   * @param progress - Progress percentage (0-100)
+   */
+  updatePhaseProgress(progress: number): void {
+    this.phaseProgress = Math.max(0, Math.min(100, progress));
+  }
+  
+  /**
+   * Complete the experience
+   */
+  complete(): void {
+    this.status = "completed";
+    this.endTime = Date.now();
+    this.phaseProgress = 100;
+  }
+  
+  /**
+   * Check if user is a participant
+   * @param userId - User ID to check
+   * @returns True if user is participating
+   */
+  isParticipant(userId: string): boolean {
+    return this.participantIds.includes(userId);
+  }
+  
+  /**
+   * Check if user is the host
+   * @param userId - User ID to check
+   * @returns True if user is the host
+   */
+  isHost(userId: string): boolean {
+    return this.hostId === userId;
+  }
+}
+
+/**
+ * TeamSummary contains minimal team information
+ * for real-time updates
+ */
+export class TeamSummary extends Schema {
+  @type("string") id: string;
+  @type("string") name: string;
+  @type("number") level: number = 1;
+  @type("number") memberCount: number = 0;
+  @type("number") activeMembers: number = 0;
+  @type(["string"]) controlledZoneIds: ArraySchema<string> = new ArraySchema<string>();
+  @type("number") lastActivity: number = 0;
+  
+  constructor(id: string, name: string, level: number = 1) {
+    super();
+    this.id = id;
+    this.name = name;
+    this.level = level;
+  }
+  
+  /**
+   * Update active member count
+   * @param count - Number of active members
+   */
+  updateActiveMembers(count: number): void {
+    this.activeMembers = count;
+    this.lastActivity = Date.now();
+  }
+  
+  /**
+   * Update zone control
+   * @param zoneIds - Array of controlled zone IDs
+   */
+  updateControlledZones(zoneIds: string[]): void {
+    this.controlledZoneIds = new ArraySchema<string>(...zoneIds);
+  }
+  
+  /**
+   * Add controlled zone
+   * @param zoneId - Zone ID to add
+   */
+  addControlledZone(zoneId: string): void {
+    if (!this.controlledZoneIds.includes(zoneId)) {
+      this.controlledZoneIds.push(zoneId);
+    }
+  }
+  
+  /**
+   * Remove controlled zone
+   * @param zoneId - Zone ID to remove
+   */
+  removeControlledZone(zoneId: string): void {
+    const index = this.controlledZoneIds.indexOf(zoneId);
+    if (index !== -1) {
+      this.controlledZoneIds.splice(index, 1);
+    }
+  }
+}
+
+/**

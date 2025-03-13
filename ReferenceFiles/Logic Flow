@@ -1,0 +1,937 @@
+# EudaimoniaGo: Complete Logical Flow
+
+## Four-Level Game Architecture
+
+EudaimoniaGo consists of four nested games corresponding to the philosophical roles in Plato's ideal city:
+
+1. **Categorization Game** (Philosopher Level)
+   - Organizing the taxonomy of arts, zones, and experiences
+   - Setting principles and virtues for the campus
+   - Defining measurement criteria for happiness
+
+2. **Connection Game** (Statesman Level)
+   - Linking zones in optimal resource networks
+   - Establishing governance relationships
+   - Measuring and improving overall happiness metrics
+
+3. **Zone Management Game** (Sophist Level)
+   - Running individual zones effectively
+   - Leading zone members in activities
+   - Implementing decisions from higher levels
+
+4. **Arts Practice Game** (Craftsman Level)
+   - Executing specific arts and skills
+   - Creating artifacts and value
+   - Participating in experiences
+
+Each level contains and depends on those below it, creating a fully integrated system.
+
+## I. USER JOURNEY LOGIC
+
+### Initial Onboarding
+
+```
+IF user downloads and opens app for first time
+THEN
+    Create User record
+    Perform initial virtue assessment
+    Create VirtueMetrics record with baseline values
+    Initialize ResourceInventory with starter resources
+    Assign to Port economic layer
+    
+    IF user completes tutorial
+    THEN
+        Unlock first 3 starter Arts in their collection
+        Assign to nearest active Zone
+        Create first AI-recommended UserGoal
+        Direct to Main Map screen
+    ELSE
+        Prompt to complete tutorial
+    END IF
+END IF
+```
+
+### Art Collection
+
+```
+IF user encounters uncaptured Art on map
+THEN
+    Display Art information preview
+    
+    IF user initiates capture process
+    THEN
+        Launch capture mini-game/challenge
+        
+        IF user successfully completes challenge
+        THEN
+            Create ArtMastery record for user
+            Link Art to user's collection
+            Update TechTree to show newly available connections
+            Award capture achievements if applicable
+            Update VirtueMetrics based on art virtueContributions
+            
+            IF art is first of its taxonomy category
+            THEN
+                Unlock related Experience opportunities
+                Create AI recommendation to explore this art category
+            END IF
+        ELSE
+            Allow retry or exit
+        END IF
+    END IF
+END IF
+```
+
+### Art Mastery Progression
+
+```
+IF user selects Art in their collection to practice
+THEN
+    Display five parts of the Art
+    Show current mastery levels for each part
+    Present available practice Experiences
+    
+    IF user selects an Art practice Experience
+    THEN
+        Create ExperienceInstance record
+        Guide user through practice stages
+        
+        FOR EACH stage in ArtStage
+        DO
+            Present stage instructions and requirements
+            Track user's progress
+            
+            IF stage requires verification
+            THEN
+                Collect submission (text, photo, etc.)
+                Verify completion through AI or peer review
+            END IF
+            
+            IF stage completed successfully
+            THEN
+                Update UserArtStageProgress
+                Increase mastery for relevant part
+                
+                IF all stages completed
+                THEN
+                    Increase overall ArtMastery level
+                    Update VirtueMetrics based on mastery gain
+                    Potentially unlock dependent Arts in TechTree
+                    Create artifact if applicable
+                END IF
+            END IF
+        END
+    END IF
+END IF
+```
+
+### Experience Participation
+
+```
+IF user browses available Experiences
+THEN
+    Display filtered list based on:
+        - User's art mastery
+        - Current zone
+        - User's rank
+        - Previous completions
+    
+    IF user selects Experience
+    THEN
+        Show details and requirements
+        Display potential rewards and virtue impacts
+        
+        IF user meets requirements AND chooses to participate
+        THEN
+            IF experience is solo
+            THEN
+                Create ExperienceInstance immediately
+            ELSE IF experience requires multiple participants
+            THEN
+                Create ExperienceInstance in "Scheduled" status
+                Allow inviting other users or wait for joining
+                
+                IF minimum participants joined
+                THEN
+                    Update status to "Ready"
+                END IF
+            END IF
+            
+            WHEN ExperienceInstance is ready
+            THEN
+                Guide user through matrix flow phases:
+                    1. Soul Out (planning)
+                    2. Body Out (execution)
+                    3. Soul In (review)
+                    4. Body In (resource exchange)
+                
+                FOR EACH phase
+                DO
+                    Present phase-specific instructions
+                    Collect required inputs or actions
+                    Verify completion
+                    
+                    IF phase completed
+                    THEN
+                        Update ExperienceInstance.phaseProgress
+                        Proceed to next phase
+                    END IF
+                END
+                
+                IF all phases completed
+                THEN
+                    Create Artifact(s) if applicable
+                    Update ArtMastery for related arts
+                    Award experience-specific rewards
+                    Update VirtueMetrics based on experience outcomes
+                    Update Zone activity metrics
+                END IF
+            END IF
+        END IF
+    END IF
+END IF
+```
+
+### AI Guide Interaction
+
+```
+IF user accesses AI Guide
+THEN
+    Analyze current VirtueMetrics
+    Identify lowest virtue scores
+    Review recent user activity
+    
+    IF specific virtue deficiency detected
+    THEN
+        Create HappinessRecommendation targeting that virtue
+        Suggest Arts that would improve the virtue
+        Recommend Experiences that utilize those Arts
+        
+        IF user accepts recommendation
+        THEN
+            Create UserGoal based on recommendation
+            Add recommended Experiences to user's suggested list
+            Schedule follow-up check on progress
+        END IF
+    END IF
+    
+    IF user asks specific question
+    THEN
+        Record in AiInteraction
+        Generate contextual response
+        Offer actionable next steps
+    END IF
+END IF
+```
+
+### Rank Progression
+
+```
+IF system performs regular user rank evaluation
+THEN
+    Calculate overall happiness score from VirtueMetrics
+    Review Art mastery breadth and depth
+    Assess zone contributions
+    
+    IF user meets criteria for next rank
+    THEN
+        Update User.rank
+        Unlock new privileges:
+            - Access to higher-tier Arts
+            - Advanced zone responsibilities
+            - New economic opportunities
+            - Additional Experience types
+        
+        IF rank reaches threshold for Laws economic layer
+        THEN
+            Enable transition from Port to Laws model
+            Create WealthClass record for user
+        ELSE IF rank reaches threshold for Republic model
+        THEN
+            Enable access to CommonResource system
+        END IF
+    END IF
+END IF
+```
+
+## II. ZONE IMPROVEMENT MECHANISMS
+
+### Zone Activity Cycle
+
+```
+IF zone is active
+THEN
+    Current matrix phase determines available activities:
+    
+    IF zone.currentMatrixQuadrant is "SoulOut"
+    THEN
+        Enable Think Tank activities
+        Focus on planning and innovation
+        Generate Ideas and Projects
+        
+    ELSE IF zone.currentMatrixQuadrant is "BodyOut"
+    THEN
+        Enable Production Tank activities
+        Focus on creation and implementation
+        Convert Ideas into Artifacts
+        
+    ELSE IF zone.currentMatrixQuadrant is "SoulIn"
+    THEN
+        Enable Review activities
+        Focus on evaluation and governance
+        Assess quality of Artifacts
+        
+    ELSE IF zone.currentMatrixQuadrant is "BodyIn"
+    THEN
+        Enable Resource Exchange activities
+        Focus on acquiring and distributing resources
+        Prepare for next cycle
+    END IF
+    
+    AFTER predetermined time period
+    THEN
+        Rotate to next matrix quadrant
+    END IF
+END IF
+```
+
+### Zone Deficiency Detection
+
+```
+IF system performs zone health check
+THEN
+    Analyze zone metrics:
+        - Productivity
+        - Resource levels
+        - Member happiness
+        - Artifact quality
+    
+    IF metrics fall below thresholds
+    THEN
+        Create ZoneDeficiency record
+        Classify deficiency type
+        Calculate impact severity
+        
+        IF parent zone exists in ZoneHierarchy
+        THEN
+            Notify parent zone governance
+            Trigger oversight protocol
+        END IF
+        
+        IF deficiency relates to specific Art
+        THEN
+            Create HappinessRecommendations for zone members
+            Suggest ArtProposals to address gap
+        END IF
+    END IF
+END IF
+```
+
+### Zone Raid Process
+
+```
+IF team initiates Zone Raid against controlling team
+THEN
+    Create ZoneRaid record
+    Set challenge type and parameters
+    
+    IF zone accepts challenge
+    THEN
+        Schedule raid event
+        Notify all participants
+        
+        WHEN raid occurs
+        THEN
+            Teams compete in specified challenge:
+                - Art mastery demonstrations
+                - Resource efficiency contests
+                - Artifact creation competitions
+                - Innovation challenges
+            
+            IF challenging team wins
+            THEN
+                Update Zone.controllingTeam
+                Transfer zone governance rights
+                Award raid victory achievements
+                Potentially alter zone specialization
+            ELSE
+                Strengthen defending team's control
+                Award successful defense achievements
+            END IF
+        END IF
+    END IF
+END IF
+```
+
+### Zone Hierarchy Management
+
+```
+IF monthly zone governance cycle occurs
+THEN
+    FOR each Sector
+    DO
+        Identify next zone in rotation sequence
+        
+        FOR each ZoneHierarchy relationship
+        DO
+            IF rotationSchedule indicates change
+            THEN
+                Update parentZoneId to new governing zone
+                Transfer oversight authorities
+                Notify all affected zones
+            END IF
+        END
+    END
+END IF
+```
+
+### Resource Flow Management
+
+```
+IF zone requires resources
+THEN
+    Check existing ResourceFlow records
+    
+    IF established flow exists
+    THEN
+        Process scheduled transfers
+        Update ResourceInventory for both zones
+    ELSE
+        Check ZoneHierarchy for parent zone
+        
+        IF constitutional authority exists
+        THEN
+            Request resource allocation from parent
+            
+            IF approved
+            THEN
+                Create new ResourceFlow record
+                Schedule regular transfers
+            END IF
+        ELSE
+            Create market request in MarketListing
+            Seek trading partners
+        END IF
+    END IF
+END IF
+```
+
+## III. ART MASTERY PROGRESSION
+
+### Art Taxonomy Development
+
+```
+IF user with Philosopher meta-role identifies missing art category
+THEN
+    Create ArtProposal for new taxonomy
+    
+    IF approved through review process
+    THEN
+        Create new ArtTaxonomy record
+        Link existing Arts if applicable
+        
+        IF genus-level taxonomy
+        THEN
+            Create placeholder for species-level categories
+            Assign to appropriate sector
+        ELSE IF species-level taxonomy
+        THEN
+            Link to parent genus
+            Define standard five parts template
+        ELSE IF instance-level taxonomy
+        THEN
+            Link to parent species
+            Define specific implementation details
+        END IF
+    END IF
+END IF
+```
+
+### Art Creation Process
+
+```
+IF user identifies need for new Art
+THEN
+    Check if Art already exists in taxonomy
+    
+    IF no existing Art addresses need
+    THEN
+        Create ArtProposal
+        Define all five parts
+        Assign to appropriate taxonomy
+        Submit for review
+        
+        IF proposal approved
+        THEN
+            Create new Art record
+            Add to TechTree
+            Make available for discovery/capture
+            Award art creation achievement
+            
+            IF art addresses existing ZoneDeficiency
+            THEN
+                Link art to deficiency
+                Notify affected zones
+            END IF
+        END IF
+    END IF
+END IF
+```
+
+### Composite Art Mastery
+
+```
+IF user attempts to master composite Art
+THEN
+    Check if user has mastered required component Arts
+    
+    IF any required Arts not yet mastered
+    THEN
+        Recommend mastering prerequisites first
+        Create UserGoals for prerequisites
+    ELSE
+        Allow composite Art mastery progression
+        Apply special bonuses for having prerequisites
+        
+        IF user achieves mastery
+        THEN
+            Apply greater virtue contributions
+            Potentially unlock higher-tier composite Arts
+        END IF
+    END IF
+END IF
+```
+
+### Collaborative Art Practice
+
+```
+IF Experience requires multiple Arts from different users
+THEN
+    List required Art combinations
+    Allow users to join with complementary Arts
+    
+    IF all required Art positions filled
+    THEN
+        Begin collaborative Experience
+        Track individual contributions
+        
+        IF experience completed successfully
+        THEN
+            Increase ArtMastery for each participant
+            Create shared Artifact
+            Establish SocialConnection between participants
+            
+            IF first time collaboration of these Arts
+            THEN
+                Record new effective combination
+                Potentially suggest new composite Art
+            END IF
+        END IF
+    END IF
+END IF
+```
+
+### Innovation Process Application
+
+```
+IF user initiates new innovation
+THEN
+    Create InnovationProcess record
+    Set current stage to "Order"
+    
+    FOR EACH stage in Vitruvian cycle
+    DO
+        Present stage-specific requirements
+        
+        IF stage is "Order"
+        THEN
+            Require identifying all components
+            Establish metrics for success
+            
+        ELSE IF stage is "Arrangement"
+        THEN
+            Create plans from multiple perspectives
+            Use both reflection and inspiration
+            
+        ELSE IF stage is "Eurythmy"
+        THEN
+            Optimize proportions of components
+            Ensure balanced relationships
+            
+        ELSE IF stage is "Symmetry"
+        THEN
+            Establish standard units
+            Create consistent ratios
+            
+        ELSE IF stage is "Propriety"
+        THEN
+            Validate against established principles
+            Consider traditional practices
+            
+        ELSE IF stage is "Economy"
+        THEN
+            Plan resource allocation
+            Balance cost and utility
+        END IF
+        
+        IF stage completed successfully
+        THEN
+            Update InnovationProcess.stageProgress
+            Advance to next stage
+            
+            IF all stages complete
+            THEN
+                Create new Artifact
+                Consider for new Art proposal
+                Update zone innovation metrics
+            END IF
+        END IF
+    END
+END IF
+```
+
+## IV. ECONOMIC SYSTEM TRANSITIONS
+
+### Port City Economy (External Layer)
+
+```
+IF user operates in Port economic layer
+THEN
+    Allow creating MarketListing with real currency
+    Enable purchasing resources, services, and experiences
+    Apply standard market pricing
+    
+    IF user creates listing
+    THEN
+        Create MarketListing record
+        Make visible to external buyers
+        
+        IF purchase occurs
+        THEN
+            Create EconomicTransaction record
+            Transfer resources or access rights
+            Update seller's ResourceInventory
+            Calculate platform fee
+            
+            IF purchase relates to project funding
+            THEN
+                Update Project.currentFunding
+                If funding goal reached, change status to "InProgress"
+            END IF
+        END IF
+    END IF
+END IF
+```
+
+### Laws Model Transition
+
+```
+IF user qualifies for Laws economic model
+THEN
+    Assign WealthClass based on contributions and virtues
+    Grant zone allocation based on wealth class
+    Set resource limits and responsibilities
+    
+    IF user is WealthClass 1 (highest)
+    THEN
+        Allow leadership in multiple zones
+        Grant oversight authorities
+        Require greater civic responsibilities
+        
+    ELSE IF user is WealthClass 2
+    THEN
+        Allow zone leadership
+        Grant moderate resource access
+        Assign specialized responsibilities
+        
+    ELSE IF user is WealthClass 3
+    THEN
+        Grant zone membership
+        Assign production responsibilities
+        Provide standard resource access
+        
+    ELSE IF user is WealthClass 4
+    THEN
+        Provide basic zone access
+        Assign support responsibilities
+        Limit resource accumulation
+    END IF
+    
+    FOR each resource transaction
+    DO
+        Check against wealth class limits
+        Apply progressive taxation if applicable
+        Record in EconomicTransaction
+    END
+END IF
+```
+
+### Republic Model Implementation
+
+```
+IF user qualifies for Republic economic model
+THEN
+    Grant access to CommonResource system
+    Remove individual ownership restrictions
+    Base access on virtue metrics and contributions
+    
+    IF user requests resource access
+    THEN
+        Check user's virtue qualifications
+        Verify legitimate need
+        
+        IF qualified
+        THEN
+            Grant access to CommonResource
+            Record usage
+            Require contribution after use
+            
+            IF resource supply diminishes
+            THEN
+                Call for replenishment contributions
+                Prioritize access based on virtue ranking
+            END IF
+        END IF
+    END IF
+    
+    IF governance decision required
+    THEN
+        Hold vote among Republic model users
+        Weight votes by wisdom virtue score
+        Implement decision based on vote outcome
+    END IF
+END IF
+```
+
+### Cross-Layer Interactions
+
+```
+IF campus requires mixed-economy project
+THEN
+    Create Project record
+    Allow funding from Port layer
+    Assign management from Laws layer
+    Allocate key resources from Republic layer
+    
+    FOR EACH economic layer
+    DO
+        Apply appropriate incentive structure:
+            - Port: Financial returns
+            - Laws: Status and authority
+            - Republic: Virtue recognition
+        
+        Track contributions by layer
+        
+        IF project succeeds
+        THEN
+            Distribute benefits across layers:
+                - Port: Financial returns
+                - Laws: Improved zone metrics
+                - Republic: Enhanced common resources
+            
+            Record project success in campus history
+        END IF
+    END
+END IF
+```
+
+## V. META-ROLE GAME SYSTEMS
+
+### 1. Philosopher Game (Categorization)
+
+```
+IF user is assigned Philosopher meta-role
+THEN
+    Enable taxonomic organization powers:
+        - Create and modify ArtTaxonomy
+        - Approve art classifications
+        - Set virtue measurement standards
+    
+    IF user identifies uncategorized arts or experiences
+    THEN
+        Allow creation of taxonomic structure
+        Propose categorization principles
+        Submit for community review
+        
+        IF approved
+        THEN
+            Update system taxonomy
+            Receive philosopher contribution points
+            Increase wisdom virtue
+        END IF
+    END IF
+    
+    IF happiness measurement needs refinement
+    THEN
+        Propose adjustments to virtue calculations
+        Provide philosophical justification
+        Submit for testing
+        
+        IF mathematical model validated
+        THEN
+            Update VirtueMetrics calculations
+            Apply to all users
+            Record contribution to campus development
+        END IF
+    END IF
+END IF
+```
+
+### 2. Statesman Game (Connection)
+
+```
+IF user is assigned Statesman meta-role
+THEN
+    Enable measurement and connection powers:
+        - Establish ZoneHierarchy relationships
+        - Create ResourceFlow allocations
+        - Monitor campus-wide happiness
+    
+    IF zone requires governance oversight
+    THEN
+        Review zone performance metrics
+        Assign appropriate parent zone
+        Define authorities and responsibilities
+        Create ZoneHierarchy record
+        
+        IF implemented successfully
+        THEN
+            Increase justice virtue
+            Receive statesman contribution points
+        END IF
+    END IF
+    
+    IF resource imbalance detected
+    THEN
+        Analyze resource distribution
+        Identify optimal flow patterns
+        Create ResourceFlow directives
+        
+        IF flows optimize campus happiness
+        THEN
+            Update all affected ResourceInventory records
+            Award resource optimization achievement
+            Increase temperance virtue
+        END IF
+    END IF
+END IF
+```
+
+### 3. Sophist Game (Zone Management)
+
+```
+IF user is assigned Sophist meta-role
+THEN
+    Enable team leadership and implementation powers:
+        - Direct zone activities
+        - Lead zone members
+        - Implement higher-level decisions
+    
+    IF zone requires activity coordination
+    THEN
+        Set zone.currentMatrixQuadrant
+        Create ZoneActivity schedule
+        Assign roles to zone members
+        
+        IF activities completed successfully
+        THEN
+            Update zone productivity metrics
+            Increase courage virtue
+            Receive sophist contribution points
+        END IF
+    END IF
+    
+    IF zone faces challenge or raid
+    THEN
+        Organize zone defense strategy
+        Assign members to challenge roles
+        Lead during competition
+        
+        IF challenge successfully handled
+        THEN
+            Improve zone ranking
+            Award leadership achievements
+            Strengthen team cohesion
+        END IF
+    END IF
+END IF
+```
+
+### 4. Craftsman Game (Arts Execution)
+
+```
+IF user participates in zone as craftsman
+THEN
+    Focus on art mastery and production:
+        - Practice assigned arts
+        - Create artifacts
+        - Participate in experiences
+    
+    IF production task assigned
+    THEN
+        Use appropriate arts
+        Follow zone standards
+        Submit artifacts for review
+        
+        IF artifacts meet quality standards
+        THEN
+            Increase art mastery
+            Contribute to zone productivity
+            Receive resource allocations
+            Improve corresponding virtues
+        END IF
+    END IF
+    
+    IF multiple craftsmen collaborate
+    THEN
+        Combine complementary arts
+        Work through collaborative experience
+        
+        IF collaboration succeeds
+        THEN
+            Create higher-value artifacts
+            Build social connections
+            Receive collaboration bonuses
+        END IF
+    END IF
+END IF
+```
+
+## VI. INTERCONNECTION & EMERGENCE
+
+### Self-Improving System Cycles
+
+```
+IF campus operates over time
+THEN
+    Craftsmen create artifacts through arts
+    Sophists coordinate zone activities
+    Statesmen connect zones and resources
+    Philosophers categorize and measure
+    
+    FOR EACH discovered deficiency
+    DO
+        Philosophers define the problem
+        Statesmen allocate resources to solve it
+        Sophists organize teams to implement solutions
+        Craftsmen execute the required arts
+        
+        IF problem solved successfully
+        THEN
+            Campus-wide happiness increases
+            New innovations emerge
+            Art taxonomy expands
+            Zone capabilities grow
+            
+            IF repeated consistently
+            THEN
+                Virtuous cycle accelerates
+                Campus evolves toward higher functioning
+                Eudaimonia increases for all participants
+            END IF
+        END IF
+    END
+END IF
+```
+
+This logical flow document outlines how the various components of EudaimoniaGo interact to create a holistic, self-improving system that naturally guides users toward building a better campus while improving their own happiness through virtue development.

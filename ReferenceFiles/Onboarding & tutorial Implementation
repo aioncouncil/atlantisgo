@@ -1,0 +1,1105 @@
+// Onboarding and Tutorial System Implementation
+
+/**
+ * Tutorial Service
+ * Manages the onboarding flow and interactive tutorials for new users.
+ */
+
+import { UserModel, TutorialModel, TutorialStepModel, PowerModel } from '../models';
+import { PowerService } from './power-service';
+import { TechTreeService } from './tech-tree-service';
+import { ExperienceService } from './experience-service';
+import { EventEmitter } from '../utils/event-emitter';
+import { NotificationService } from './notification-service';
+
+// Tutorial Step Interface
+interface TutorialStep {
+  id: string;
+  stepNumber: number;
+  type: 'instruction' | 'action' | 'explanation' | 'reward';
+  title: string;
+  description: string;
+  visualType: 'image' | 'video' | 'animation';
+  visualUrl: string;
+  actionType?: string;
+  actionParameter?: string;
+  completionCriteria: {
+    type: 'manual' | 'event' | 'condition';
+    eventName?: string;
+    eventParams?: Record<string, any>;
+    conditionCheck?: string;
+  };
+  rewards?: {
+    powers?: string[];
+    coins?: number;
+    items?: string[];
+    virtuePoints?: Record<string, number>;
+  };
+  skippable: boolean;
+  position?: {
+    screen: string;
+    element: string;
+  };
+  completion: {
+    buttonText: string;
+    nextStepDelay: number;
+  };
+  previousStepId?: string;
+  nextStepId?: string;
+}
+
+// Tutorial Interface
+interface Tutorial {
+  id: string;
+  name: string;
+  description: string;
+  category: 'onboarding' | 'feature' | 'advanced';
+  trigger: {
+    type: 'automatic' | 'player_action' | 'level_up' | 'feature_unlock';
+    condition?: string;
+  };
+  firstStepId: string;
+  isSkippable: boolean;
+  requiredLevel?: number;
+  requiredFeatures?: string[];
+  version: number;
+  steps: Map<string, TutorialStep>;
+}
+
+// User Tutorial Progress Interface
+interface UserTutorialProgress {
+  userId: string;
+  tutorials: Map<string, {
+    tutorialId: string;
+    currentStepId: string;
+    completedStepIds: Set<string>;
+    startTime: Date;
+    lastUpdated: Date;
+    isCompleted: boolean;
+    completionTime?: Date;
+  }>;
+}
+
+class TutorialService {
+  private powerService: PowerService;
+  private techTreeService: TechTreeService;
+  private experienceService: ExperienceService;
+  private events: EventEmitter;
+  private notifications: NotificationService;
+  
+  // Cache of tutorials
+  private tutorials: Map<string, Tutorial> = new Map();
+  
+  // Cache of user progress
+  private userProgress: Map<string, UserTutorialProgress> = new Map();
+  
+  // Tutorial step completion listeners
+  private completionListeners: Map<string, Function> = new Map();
+  
+  constructor(
+    powerService: PowerService,
+    techTreeService: TechTreeService,
+    experienceService: ExperienceService,
+    events: EventEmitter,
+    notifications: NotificationService
+  ) {
+    this.powerService = powerService;
+    this.techTreeService = techTreeService;
+    this.experienceService = experienceService;
+    this.events = events;
+    this.notifications = notifications;
+    
+    // Initialize tutorial system
+    this.initializeTutorialSystem();
+    
+    // Set up event listeners
+    this.setupEventListeners();
+  }
+  
+  /**
+   * Initialize the tutorial system
+   */
+  private async initializeTutorialSystem() {
+    try {
+      console.log('Initializing tutorial system...');
+      
+      // Load all tutorials from database
+      const tutorials = await TutorialModel.find({ isActive: true }).lean();
+      
+      for (const tutorial of tutorials) {
+        await this.loadTutorial(tutorial._id.toString());
+      }
+      
+      console.log(`Loaded ${this.tutorials.size} tutorials into memory`);
+    } catch (error) {
+      console.error('Error initializing tutorial system:', error);
+    }
+  }
+  
+  /**
+   * Set up event listeners for tracking tutorial progress
+   */
+  private setupEventListeners() {
+    // User registration event
+    this.events.on('user:registered', (data) => {
+      this.startOnboardingFlow(data.userId);
+    });
+    
+    // Listen for user login event
+    this.events.on('user:login', (data) => {
+      this.checkForPendingTutorials(data.userId);
+    });
+    
+    // Listen for tutorial-specific events that could trigger completion
+    this.events.on('power:collected', (data) => {
+      this.checkStepCompletion('power:collected', data);
+    });
+    
+    this.events.on('experience:started', (data) => {
+      this.checkStepCompletion('experience:started', data);
+    });
+    
+    this.events.on('experience:completed', (data) => {
+      this.checkStepCompletion('experience:completed', data);
+    });
+    
+    this.events.on('zone:visited', (data) => {
+      this.checkStepCompletion('zone:visited', data);
+    });
+    
+    this.events.on('marketplace:visited', (data) => {
+      this.checkStepCompletion('marketplace:visited', data);
+    });
+    
+    this.events.on('techTree:viewed', (data) => {
+      this.checkStepCompletion('techTree:viewed', data);
+    });
+    
+    // Player rank change could trigger new tutorials
+    this.events.on('player:rank_changed', (data) => {
+      this.checkForUnlockedTutorials(data.userId, data.newRank);
+    });
+    
+    // Feature unlocks could trigger tutorials
+    this.events.on('feature:unlocked', (data) => {
+      this.checkForFeatureUnlockTutorials(data.userId, data.featureId);
+    });
+  }
+  
+  /**
+   * Load a tutorial from the database
+   */
+  private async loadTutorial(tutorialId: string): Promise<Tutorial | null> {
+    try {
+      // Check if already loaded
+      if (this.tutorials.has(tutorialId)) {
+        return this.tutorials.get(tutorialId) || null;
+      }
+      
+      // Get tutorial from database
+      const tutorialData = await TutorialModel.findById(tutorialId).lean();
+      if (!tutorialData) {
+        console.error(`Tutorial ${tutorialId} not found`);
+        return null;
+      }
+      
+      // Get all steps for this tutorial
+      const stepsData = await TutorialStepModel.find({ tutorialId }).sort({ stepNumber: 1 }).lean();
+      
+      // Create tutorial object
+      const tutorial: Tutorial = {
+        id: tutorialId,
+        name: tutorialData.name,
+        description: tutorialData.description,
+        category: tutorialData.category,
+        trigger: tutorialData.trigger,
+        firstStepId: tutorialData.firstStepId,
+        isSkippable: tutorialData.isSkippable,
+        requiredLevel: tutorialData.requiredLevel,
+        requiredFeatures: tutorialData.requiredFeatures,
+        version: tutorialData.version,
+        steps: new Map()
+      };
+      
+      // Add all steps to the tutorial
+      for (const stepData of stepsData) {
+        const step: TutorialStep = {
+          id: stepData._id.toString(),
+          stepNumber: stepData.stepNumber,
+          type: stepData.type,
+          title: stepData.title,
+          description: stepData.description,
+          visualType: stepData.visualType,
+          visualUrl: stepData.visualUrl,
+          actionType: stepData.actionType,
+          actionParameter: stepData.actionParameter,
+          completionCriteria: stepData.completionCriteria,
+          rewards: stepData.rewards,
+          skippable: stepData.skippable,
+          position: stepData.position,
+          completion: stepData.completion,
+          previousStepId: stepData.previousStepId,
+          nextStepId: stepData.nextStepId
+        };
+        
+        tutorial.steps.set(step.id, step);
+      }
+      
+      // Store in cache
+      this.tutorials.set(tutorialId, tutorial);
+      
+      return tutorial;
+    } catch (error) {
+      console.error(`Error loading tutorial ${tutorialId}:`, error);
+      return null;
+    }
+  }
+  
+  /**
+   * Start the onboarding flow for a new user
+   */
+  public async startOnboardingFlow(userId: string) {
+    try {
+      // Check if user exists
+      const user = await UserModel.findById(userId).lean();
+      if (!user) {
+        throw new Error('User not found');
+      }
+      
+      // Find the onboarding tutorial
+      const onboardingTutorial = Array.from(this.tutorials.values()).find(
+        tutorial => tutorial.category === 'onboarding' && tutorial.trigger.type === 'automatic'
+      );
+      
+      if (!onboardingTutorial) {
+        console.error('Onboarding tutorial not found');
+        return;
+      }
+      
+      // Start the tutorial
+      await this.startTutorial(userId, onboardingTutorial.id);
+      
+      // Log the event
+      console.log(`Started onboarding flow for user ${userId}`);
+    } catch (error) {
+      console.error(`Error starting onboarding flow for user ${userId}:`, error);
+    }
+  }
+  
+  /**
+   * Start a tutorial for a user
+   */
+  public async startTutorial(userId: string, tutorialId: string) {
+    try {
+      // Get tutorial
+      const tutorial = await this.loadTutorial(tutorialId);
+      if (!tutorial) {
+        throw new Error('Tutorial not found');
+      }
+      
+      // Get user progress
+      let userProgress = this.userProgress.get(userId);
+      
+      if (!userProgress) {
+        userProgress = {
+          userId,
+          tutorials: new Map()
+        };
+        
+        this.userProgress.set(userId, userProgress);
+      }
+      
+      // Check if tutorial is already in progress
+      const existingProgress = userProgress.tutorials.get(tutorialId);
+      if (existingProgress && !existingProgress.isCompleted) {
+        // Resume existing tutorial
+        return this.getCurrentTutorialStep(userId, tutorialId);
+      }
+      
+      // Get the first step
+      const firstStep = tutorial.steps.get(tutorial.firstStepId);
+      if (!firstStep) {
+        throw new Error('First step not found');
+      }
+      
+      // Create tutorial progress
+      userProgress.tutorials.set(tutorialId, {
+        tutorialId,
+        currentStepId: firstStep.id,
+        completedStepIds: new Set(),
+        startTime: new Date(),
+        lastUpdated: new Date(),
+        isCompleted: false
+      });
+      
+      // Save to database
+      await UserModel.updateOne(
+        { _id: userId },
+        {
+          $push: {
+            'tutorials.inProgress': {
+              tutorialId,
+              currentStepId: firstStep.id,
+              completedStepIds: [],
+              startTime: new Date(),
+              lastUpdated: new Date()
+            }
+          }
+        }
+      );
+      
+      // Return the first step
+      return {
+        tutorial: {
+          id: tutorial.id,
+          name: tutorial.name,
+          description: tutorial.description,
+          category: tutorial.category,
+          isSkippable: tutorial.isSkippable
+        },
+        currentStep: firstStep,
+        progress: {
+          currentStepNumber: firstStep.stepNumber,
+          totalSteps: tutorial.steps.size,
+          percentComplete: 0
+        }
+      };
+    } catch (error) {
+      console.error(`Error starting tutorial ${tutorialId} for user ${userId}:`, error);
+      return null;
+    }
+  }
+  
+  /**
+   * Get the current tutorial step for a user
+   */
+  public async getCurrentTutorialStep(userId: string, tutorialId: string) {
+    try {
+      // Get tutorial
+      const tutorial = await this.loadTutorial(tutorialId);
+      if (!tutorial) {
+        throw new Error('Tutorial not found');
+      }
+      
+      // Get user progress
+      const userProgress = this.userProgress.get(userId);
+      if (!userProgress) {
+        throw new Error('User progress not found');
+      }
+      
+      // Get tutorial progress
+      const tutorialProgress = userProgress.tutorials.get(tutorialId);
+      if (!tutorialProgress) {
+        throw new Error('Tutorial progress not found');
+      }
+      
+      // If tutorial is completed, return null
+      if (tutorialProgress.isCompleted) {
+        return {
+          tutorial: {
+            id: tutorial.id,
+            name: tutorial.name,
+            description: tutorial.description,
+            category: tutorial.category,
+            isSkippable: tutorial.isSkippable
+          },
+          isCompleted: true,
+          completionTime: tutorialProgress.completionTime
+        };
+      }
+      
+      // Get current step
+      const currentStep = tutorial.steps.get(tutorialProgress.currentStepId);
+      if (!currentStep) {
+        throw new Error('Current step not found');
+      }
+      
+      // Calculate progress
+      const percentComplete = Math.round(
+        (tutorialProgress.completedStepIds.size / tutorial.steps.size) * 100
+      );
+      
+      // Return the step
+      return {
+        tutorial: {
+          id: tutorial.id,
+          name: tutorial.name,
+          description: tutorial.description,
+          category: tutorial.category,
+          isSkippable: tutorial.isSkippable
+        },
+        currentStep,
+        progress: {
+          currentStepNumber: currentStep.stepNumber,
+          totalSteps: tutorial.steps.size,
+          percentComplete
+        }
+      };
+    } catch (error) {
+      console.error(`Error getting current tutorial step for user ${userId}, tutorial ${tutorialId}:`, error);
+      return null;
+    }
+  }
+  
+  /**
+   * Complete a tutorial step for a user
+   */
+  public async completeCurrentStep(userId: string, tutorialId: string, forceComplete: boolean = false) {
+    try {
+      // Get tutorial
+      const tutorial = await this.loadTutorial(tutorialId);
+      if (!tutorial) {
+        throw new Error('Tutorial not found');
+      }
+      
+      // Get user progress
+      const userProgress = this.userProgress.get(userId);
+      if (!userProgress) {
+        throw new Error('User progress not found');
+      }
+      
+      // Get tutorial progress
+      const tutorialProgress = userProgress.tutorials.get(tutorialId);
+      if (!tutorialProgress) {
+        throw new Error('Tutorial progress not found');
+      }
+      
+      // If tutorial is already completed, return
+      if (tutorialProgress.isCompleted) {
+        return {
+          success: false,
+          message: 'Tutorial already completed'
+        };
+      }
+      
+      // Get current step
+      const currentStep = tutorial.steps.get(tutorialProgress.currentStepId);
+      if (!currentStep) {
+        throw new Error('Current step not found');
+      }
+      
+      // Check if step completion criteria is met or force complete
+      if (!forceComplete && currentStep.completionCriteria.type === 'condition') {
+        const conditionResult = await this.evaluateCompletionCondition(
+          userId,
+          currentStep.completionCriteria.conditionCheck || ''
+        );
+        
+        if (!conditionResult) {
+          return {
+            success: false,
+            message: 'Completion criteria not met'
+          };
+        }
+      }
+      
+      // Award rewards if any
+      if (currentStep.rewards) {
+        await this.awardStepRewards(userId, currentStep);
+      }
+      
+      // Mark step as completed
+      tutorialProgress.completedStepIds.add(currentStep.id);
+      
+      // Check if there's a next step
+      if (currentStep.nextStepId) {
+        // Get next step
+        const nextStep = tutorial.steps.get(currentStep.nextStepId);
+        if (!nextStep) {
+          throw new Error('Next step not found');
+        }
+        
+        // Update current step
+        tutorialProgress.currentStepId = nextStep.id;
+        tutorialProgress.lastUpdated = new Date();
+        
+        // Save to database
+        await UserModel.updateOne(
+          { _id: userId, 'tutorials.inProgress.tutorialId': tutorialId },
+          {
+            $push: { 'tutorials.inProgress.$.completedStepIds': currentStep.id },
+            $set: {
+              'tutorials.inProgress.$.currentStepId': nextStep.id,
+              'tutorials.inProgress.$.lastUpdated': new Date()
+            }
+          }
+        );
+        
+        // Return the next step
+        return {
+          success: true,
+          message: 'Step completed',
+          nextStep,
+          progress: {
+            currentStepNumber: nextStep.stepNumber,
+            totalSteps: tutorial.steps.size,
+            percentComplete: Math.round(
+              ((tutorialProgress.completedStepIds.size) / tutorial.steps.size) * 100
+            )
+          }
+        };
+      } else {
+        // This was the last step, complete the tutorial
+        tutorialProgress.isCompleted = true;
+        tutorialProgress.completionTime = new Date();
+        
+        // Save to database
+        await UserModel.updateOne(
+          { _id: userId, 'tutorials.inProgress.tutorialId': tutorialId },
+          {
+            $push: { 'tutorials.inProgress.$.completedStepIds': currentStep.id },
+            $set: {
+              'tutorials.inProgress.$.isCompleted': true,
+              'tutorials.inProgress.$.completionTime': new Date(),
+              'tutorials.inProgress.$.lastUpdated': new Date()
+            }
+          }
+        );
+        
+        // Move from inProgress to completed
+        await UserModel.updateOne(
+          { _id: userId },
+          {
+            $pull: { 'tutorials.inProgress': { tutorialId } },
+            $push: {
+              'tutorials.completed': {
+                tutorialId,
+                completedAt: new Date(),
+                version: tutorial.version
+              }
+            }
+          }
+        );
+        
+        // Emit tutorial completion event
+        this.events.emit('tutorial:completed', {
+          userId,
+          tutorialId,
+          tutorialName: tutorial.name,
+          category: tutorial.category
+        });
+        
+        // Return completion status
+        return {
+          success: true,
+          message: 'Tutorial completed',
+          isCompleted: true,
+          tutorialName: tutorial.name
+        };
+      }
+    } catch (error) {
+      console.error(`Error completing tutorial step for user ${userId}, tutorial ${tutorialId}:`, error);
+      return {
+        success: false,
+        message: 'Error completing step'
+      };
+    }
+  }
+  
+  /**
+   * Skip a tutorial
+   */
+  public async skipTutorial(userId: string, tutorialId: string) {
+    try {
+      // Get tutorial
+      const tutorial = await this.loadTutorial(tutorialId);
+      if (!tutorial) {
+        throw new Error('Tutorial not found');
+      }
+      
+      // Check if tutorial is skippable
+      if (!tutorial.isSkippable) {
+        return {
+          success: false,
+          message: 'Tutorial cannot be skipped'
+        };
+      }
+      
+      // Get user progress
+      const userProgress = this.userProgress.get(userId);
+      if (!userProgress) {
+        return {
+          success: false,
+          message: 'User progress not found'
+        };
+      }
+      
+      // Get tutorial progress
+      const tutorialProgress = userProgress.tutorials.get(tutorialId);
+      if (!tutorialProgress) {
+        return {
+          success: false,
+          message: 'Tutorial progress not found'
+        };
+      }
+      
+      // If tutorial is already completed, return
+      if (tutorialProgress.isCompleted) {
+        return {
+          success: false,
+          message: 'Tutorial already completed'
+        };
+      }
+      
+      // Mark tutorial as completed
+      tutorialProgress.isCompleted = true;
+      tutorialProgress.completionTime = new Date();
+      
+      // Move from inProgress to skipped
+      await UserModel.updateOne(
+        { _id: userId },
+        {
+          $pull: { 'tutorials.inProgress': { tutorialId } },
+          $push: {
+            'tutorials.skipped': {
+              tutorialId,
+              skippedAt: new Date(),
+              version: tutorial.version
+            }
+          }
+        }
+      );
+      
+      // Emit tutorial skipped event
+      this.events.emit('tutorial:skipped', {
+        userId,
+        tutorialId,
+        tutorialName: tutorial.name,
+        category: tutorial.category
+      });
+      
+      return {
+        success: true,
+        message: 'Tutorial skipped'
+      };
+    } catch (error) {
+      console.error(`Error skipping tutorial for user ${userId}, tutorial ${tutorialId}:`, error);
+      return {
+        success: false,
+        message: 'Error skipping tutorial'
+      };
+    }
+  }
+  
+  /**
+   * Evaluate a completion condition
+   */
+  private async evaluateCompletionCondition(userId: string, condition: string): Promise<boolean> {
+    try {
+      // This would have more sophisticated condition checking in a real implementation
+      // For now, we'll use simple conditions
+      
+      // Check if condition is to have a specific power
+      if (condition.startsWith('hasPower:')) {
+        const powerId = condition.split(':')[1];
+        const hasPower = await this.powerService.userHasPower(userId, powerId);
+        return hasPower;
+      }
+      
+      // Check if condition is to have completed a specific experience
+      if (condition.startsWith('completedExperience:')) {
+        const experienceId = condition.split(':')[1];
+        const completedExperience = await this.experienceService.hasCompletedExperience(userId, experienceId);
+        return completedExperience;
+      }
+      
+      // Check if condition is to have a specific rank
+      if (condition.startsWith('hasRank:')) {
+        const rankLevel = parseInt(condition.split(':')[1], 10);
+        const user = await UserModel.findById(userId).lean();
+        return user && user.rank >= rankLevel;
+      }
+      
+      // Check if condition is to have visited a specific zone
+      if (condition.startsWith('visitedZone:')) {
+        const zoneId = condition.split(':')[1];
+        const user = await UserModel.findById(userId).lean();
+        return user && user.visitedZones && user.visitedZones.includes(zoneId);
+      }
+      
+      // Default to true for unknown conditions
+      return true;
+    } catch (error) {
+      console.error(`Error evaluating condition for user ${userId}: ${condition}`, error);
+      return false;
+    }
+  }
+  
+  /**
+   * Award rewards for completing a tutorial step
+   */
+  private async awardStepRewards(userId: string, step: TutorialStep) {
+    try {
+      const rewards = step.rewards;
+      if (!rewards) return;
+      
+      // Award power unlocks
+      if (rewards.powers && rewards.powers.length > 0) {
+        for (const powerId of rewards.powers) {
+          // In a tutorial, we might want to directly give the power rather than just make it available
+          await this.powerService.grantPowerToUser(userId, powerId);
+        }
+      }
+      
+      // Award coins
+      if (rewards.coins) {
+        await UserModel.updateOne(
+          { _id: userId },
+          { $inc: { 'wallet.coins': rewards.coins } }
+        );
+      }
+      
+      // Award items
+      if (rewards.items && rewards.items.length > 0) {
+        // In a real implementation, this would add items to inventory
+        console.log(`Awarding items to user ${userId}:`, rewards.items);
+      }
+      
+      // Award virtue points
+      if (rewards.virtuePoints) {
+        const virtueUpdates = {};
+        
+        for (const [virtue, points] of Object.entries(rewards.virtuePoints)) {
+          virtueUpdates[`virtues.${virtue}`] = points;
+        }
+        
+        if (Object.keys(virtueUpdates).length > 0) {
+          await UserModel.updateOne(
+            { _id: userId },
+            { $inc: virtueUpdates }
+          );
+        }
+      }
+      
+      // Emit reward event
+      this.events.emit('tutorial:rewards_granted', {
+        userId,
+        stepId: step.id,
+        rewards
+      });
+    } catch (error) {
+      console.error(`Error awarding rewards for step ${step.id} to user ${userId}:`, error);
+    }
+  }
+  
+  /**
+   * Check for step completion based on an event
+   */
+  private async checkStepCompletion(eventName: string, eventData: any) {
+    try {
+      const { userId } = eventData;
+      
+      // Get user progress
+      const userProgress = this.userProgress.get(userId);
+      if (!userProgress) return;
+      
+      // Check all active tutorials
+      for (const [tutorialId, progress] of userProgress.tutorials.entries()) {
+        // Skip completed tutorials
+        if (progress.isCompleted) continue;
+        
+        // Get tutorial
+        const tutorial = this.tutorials.get(tutorialId);
+        if (!tutorial) continue;
+        
+        // Get current step
+        const currentStep = tutorial.steps.get(progress.currentStepId);
+        if (!currentStep) continue;
+        
+        // Check if this event matches the completion criteria
+        if (
+          currentStep.completionCriteria.type === 'event' &&
+          currentStep.completionCriteria.eventName === eventName
+        ) {
+          // Check if event parameters match
+          let paramsMatch = true;
+          
+          if (currentStep.completionCriteria.eventParams) {
+            for (const [key, value] of Object.entries(currentStep.completionCriteria.eventParams)) {
+              if (eventData[key] !== value) {
+                paramsMatch = false;
+                break;
+              }
+            }
+          }
+          
+          if (paramsMatch) {
+            // Auto-complete the step
+            await this.completeCurrentStep(userId, tutorialId, true);
+            
+            // Notify the user
+            this.notifications.sendToUser(userId, {
+              type: 'tutorial_progress',
+              title: 'Tutorial Progress',
+              message: `Step completed: ${currentStep.title}`,
+              tutorialId,
+              stepId: currentStep.id
+            });
+          }
+        }
+      }
+    } catch (error) {
+      console.error(`Error checking step completion for event ${eventName}:`, error);
+    }
+  }
+  
+  /**
+   * Check for pending tutorials when a user logs in
+   */
+  private async checkForPendingTutorials(userId: string) {
+    try {
+      // Get user
+      const user = await UserModel.findById(userId).populate('tutorials.inProgress').lean();
+      if (!user) return;
+      
+      // Check if there are any in-progress tutorials
+      if (user.tutorials && user.tutorials.inProgress && user.tutorials.inProgress.length > 0) {
+        // Get the first in-progress tutorial
+        const inProgressTutorial = user.tutorials.inProgress[0];
+        
+        // Load user progress
+        await this.loadUserProgress(userId);
+        
+        // Notify the user
+        this.notifications.sendToUser(userId, {
+          type: 'tutorial_resume',
+          title: 'Resume Tutorial',
+          message: `Would you like to resume the "${inProgressTutorial.tutorialId.name}" tutorial?`,
+          tutorialId: inProgressTutorial.tutorialId._id.toString(),
+          action: 'resume_tutorial'
+        });
+      } else {
+        // Check if there are any tutorials that should be triggered
+        await this.checkForUnlockedTutorials(userId, user.rank);
+      }
+    } catch (error) {
+      console.error(`Error checking for pending tutorials for user ${userId}:`, error);
+    }
+  }
+  
+  /**
+   * Check for tutorials that should be unlocked based on rank
+   */
+  private async checkForUnlockedTutorials(userId: string, rank: number) {
+    try {
+      // Get completed and skipped tutorials
+      const user = await UserModel.findById(userId, {
+        'tutorials.completed': 1,
+        'tutorials.skipped': 1
+      }).lean();
+      
+      if (!user) return;
+      
+      const completedTutorialIds = new Set(
+        user.tutorials?.completed?.map(t => t.tutorialId.toString()) || []
+      );
+      
+      const skippedTutorialIds = new Set(
+        user.tutorials?.skipped?.map(t => t.tutorialId.toString()) || []
+      );
+      
+      // Find tutorials that match the rank requirement
+      const eligibleTutorials = Array.from(this.tutorials.values()).filter(tutorial => {
+        // Skip already completed or skipped tutorials
+        if (
+          completedTutorialIds.has(tutorial.id) ||
+          skippedTutorialIds.has(tutorial.id)
+        ) {
+          return false;
+        }
+        
+        // Check rank requirement
+        if (tutorial.requiredLevel && rank < tutorial.requiredLevel) {
+          return false;
+        }
+        
+        // Check trigger type
+        if (tutorial.trigger.type === 'level_up') {
+          return true;
+        }
+        
+        return false;
+      });
+      
+      // If any eligible tutorials found, suggest them
+      if (eligibleTutorials.length > 0) {
+        // Sort by required level (descending)
+        eligibleTutorials.sort((a, b) => 
+          (b.requiredLevel || 0) - (a.requiredLevel || 0)
+        );
+        
+        // Take the first one
+        const tutorialToSuggest = eligibleTutorials[0];
+        
+        // Notify the user
+        this.notifications.sendToUser(userId, {
+          type: 'tutorial_available',
+          title: 'New Tutorial Available',
+          message: `"${tutorialToSuggest.name}" tutorial is now available! Would you like to start it?`,
+          tutorialId: tutorialToSuggest.id,
+          action: 'start_tutorial'
+        });
+      }
+    } catch (error) {
+      console.error(`Error checking for unlocked tutorials for user ${userId}:`, error);
+    }
+  }
+  
+  /**
+   * Check for tutorials triggered by feature unlocks
+   */
+  private async checkForFeatureUnlockTutorials(userId: string, featureId: string) {
+    try {
+      // Similar implementation to checkForUnlockedTutorials
+      // Would check for tutorials with feature-specific triggers
+      console.log(`Checking for feature unlock tutorials for user ${userId}, feature ${featureId}`);
+    } catch (error) {
+      console.error(`Error checking for feature unlock tutorials for user ${userId}, feature ${featureId}:`, error);
+    }
+  }
+  
+  /**
+   * Load user tutorial progress from database
+   */
+  private async loadUserProgress(userId: string) {
+    try {
+      // Get user data
+      const user = await UserModel.findById(userId, {
+        'tutorials.inProgress': 1,
+        'tutorials.completed': 1,
+        'tutorials.skipped': 1
+      }).lean();
+      
+      if (!user || !user.tutorials) return;
+      
+      // Create progress object
+      const progress: UserTutorialProgress = {
+        userId,
+        tutorials: new Map()
+      };
+      
+      // Load in-progress tutorials
+      if (user.tutorials.inProgress) {
+        for (const tutorialProgress of user.tutorials.inProgress) {
+          progress.tutorials.set(tutorialProgress.tutorialId.toString(), {
+            tutorialId: tutorialProgress.tutorialId.toString(),
+            currentStepId: tutorialProgress.currentStepId,
+            completedStepIds: new Set(tutorialProgress.completedStepIds || []),
+            startTime: tutorialProgress.startTime,
+            lastUpdated: tutorialProgress.lastUpdated,
+            isCompleted: tutorialProgress.isCompleted || false,
+            completionTime: tutorialProgress.completionTime
+          });
+        }
+      }
+      
+      // Store in cache
+      this.userProgress.set(userId, progress);
+      
+      return progress;
+    } catch (error) {
+      console.error(`Error loading user progress for user ${userId}:`, error);
+      return null;
+    }
+  }
+}
+
+// Sample onboarding tutorial data for reference
+const onboardingTutorialData = {
+  name: "Welcome to EudaimoniaGo",
+  description: "Learn the basics of EudaimoniaGo and get started on your journey",
+  category: "onboarding",
+  trigger: {
+    type: "automatic"
+  },
+  firstStepId: "step1",
+  isSkippable: false,
+  version: 1,
+  steps: [
+    {
+      id: "step1",
+      stepNumber: 1,
+      type: "explanation",
+      title: "Welcome to EudaimoniaGo!",
+      description: "Begin your journey to personal growth and community contribution. This tutorial will guide you through the basics.",
+      visualType: "video",
+      visualUrl: "videos/intro.mp4",
+      completionCriteria: {
+        type: "manual"
+      },
+      skippable: false,
+      completion: {
+        buttonText: "Let's Begin",
+        nextStepDelay: 0
+      },
+      nextStepId: "step2"
+    },
+    {
+      id: "step2",
+      stepNumber: 2,
+      type: "action",
+      title: "Explore the Map",
+      description: "The map shows your surroundings and nearby Powers, Zones, and Experiences. Try moving around to see what's nearby.",
+      visualType: "animation",
+      visualUrl: "animations/map_navigation.json",
+      actionType: "map_move",
+      completionCriteria: {
+        type: "event",
+        eventName: "map:moved",
+        eventParams: {
+          distance: 10
+        }
+      },
+      skippable: false,
+      position: {
+        screen: "map",
+        element: "map_container"
+      },
+      completion: {
+        buttonText: "Next",
+        nextStepDelay: 500
+      },
+      previousStepId: "step1",
+      nextStepId: "step3"
+    },
+    {
+      id: "step3",
+      stepNumber: 3,
+      type: "action",
+      title: "Your First Power",
+      description: "Powers are skills and abilities you can collect. Here's your first Power - tap to collect it!",
+      visualType: "animation",
+      visualUrl: "animations/power_collection.json",
+      actionType: "collect_power",
+      actionParameter: "p001", // Dialectic Reasoning power
+      completionCriteria: {
+        type: "event",
+        eventName: "power:collected",
+        eventParams: {
+          powerId: "p001"
+        }
+      },
+      rewards: {
+        powers: ["p001"],
+        virtuePoints: {
+          wisdom: 5
+        },
+        coins: 100
+      },
+      skippable: false,
+      position: {
+        screen: "map",
+        element: "power_indicator"
+      },
+      completion: {
+        buttonText: "Continue",
+        nextStepDelay: 1000
+      },
+      previousStepId: "step2",
+      nextStepId: "step4"
+    },
+    // Additional steps would follow...
+  ]
+};
+
+export default TutorialService;
