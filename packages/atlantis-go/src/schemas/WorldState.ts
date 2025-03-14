@@ -7,7 +7,7 @@
  */
 
 import { Schema, type, MapSchema } from '@colyseus/schema';
-import { Player, Power, Zone } from './GameEntities';
+import { Player, Power, Zone } from './GameEntities.js';
 
 /**
  * WorldState contains all synchronized game state

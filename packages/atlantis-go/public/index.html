@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Atlantis Go - World Map</title>
+  <script src="https://unpkg.com/colyseus.js@0.14.0/dist/colyseus.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.70.0/dist/phaser.min.js"></script>
+  <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      touch-action: manipulation;
+    }
+    /* Additional styles */
+    #status-panel {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      background-color: rgba(0, 0, 0, 0.7);
+      color: #fff;
+      padding: 10px;
+      border-radius: 5px;
+      z-index: 1000;
+      width: 200px;
+      font-size: 12px;
+      transition: opacity 0.3s ease;
+      pointer-events: auto;
+    }
+    
+    #ui-toggle {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      background-color: rgba(0, 0, 0, 0.7);
+      color: #fff;
+      padding: 5px 10px;
+      border-radius: 5px;
+      z-index: 1001;
+      cursor: pointer;
+      font-size: 14px;
+      border: 1px solid #333;
+      pointer-events: auto;
+    }
+    
+    #status-panel h2 {
+      font-size: 14px;
+      margin: 0 0 10px 0;
+    }
+    
+    .virtue-bar {
+      margin-bottom: 5px;
+    }
+    
+    .progress-bar {
+      height: 12px;
+      background-color: #222;
+      border-radius: 3px;
+      overflow: hidden;
+      display: inline-block;
+      width: 60%;
+      margin: 0 5px;
+    }
+    
+    .progress {
+      height: 100%;
+      transition: width 0.3s ease;
+    }
+    
+    /* Improved touch controls */
+    .controls {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: grid;
+      grid-template-areas:
+        ". north ."
+        "west center east"
+        ". south .";
+      grid-gap: 5px;
+      z-index: 100;
+      pointer-events: auto;
+    }
+    
+    .controls button {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      font-size: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-color: rgba(51, 51, 51, 0.7);
+      border: 2px solid rgba(100, 100, 100, 0.5);
+      color: white;
+      padding: 0;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+    
+    .controls button:active {
+      background-color: rgba(80, 80, 80, 0.9);
+      transform: scale(0.95);
+    }
+    
+    #btn-north { grid-area: north; }
+    #btn-south { grid-area: south; }
+    #btn-east { grid-area: east; }
+    #btn-west { grid-area: west; }
+    #center-point { 
+      grid-area: center; 
+      width: 20px;
+      height: 20px;
+      background-color: rgba(100, 100, 100, 0.3);
+      border-radius: 50%;
+      margin: auto;
+    }
+    
+    #zoom-controls {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      z-index: 100;
+      pointer-events: auto;
+    }
+    
+    #zoom-controls button {
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      font-size: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-color: rgba(51, 51, 51, 0.7);
+      border: 2px solid rgba(100, 100, 100, 0.5);
+      color: white;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+      -webkit-tap-highlight-color: transparent;
+    }
+    
+    #zoom-controls button:active {
+      background-color: rgba(80, 80, 80, 0.9);
+      transform: scale(0.95);
+    }
+    
+    .mobile-ui-layer {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 100;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <!-- Loading Screen -->
+  <div id="loading-screen">
+    <img src="assets/logo.svg" alt="Atlantis Go" class="logo" style="margin-bottom: 20px; max-width: 300px;">
+    <div class="spinner"></div>
+    <div id="loading-text">Connecting to Atlantis...</div>
+    <div id="loading-progress" style="width: 200px; height: 6px; background: rgba(255,255,255,0.1); margin-top: 20px; border-radius: 3px; overflow: hidden;">
+      <div id="progress-bar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #3a86ff, #63a4ff); transition: width 0.3s ease-out;"></div>
+    </div>
+  </div>
+
+  <div id="game-container"></div>
+  
+  <!-- Mobile UI Layer that sits on top of game canvas but allows click-through -->
+  <div class="mobile-ui-layer">
+    <div id="status-panel">
+      <div class="status-header">
+        <img src="assets/logo.svg" alt="Atlantis Go" class="status-logo" style="width: 150px; margin-bottom: 10px;">
+      </div>
+      <div id="connection-status" class="connecting">Connecting...</div>
+      <div id="player-count">Players: 0</div>
+      <div id="power-count">Powers: 0</div>
+      <div id="zone-info">Zone: None</div>
+      <button id="btn-reconnect" style="margin-top: 10px; display: none;">Reconnect</button>
+      
+      <!-- Virtue metrics -->
+      <div id="virtue-metrics">
+        <h3>Virtue Metrics</h3>
+        <div class="virtue-bar">
+          <span>Wisdom:</span>
+          <div class="progress-bar">
+            <div id="wisdom-progress" class="progress" style="width: 0%;"></div>
+          </div>
+          <span id="wisdom-value">0</span>
+        </div>
+        <div class="virtue-bar">
+          <span>Courage:</span>
+          <div class="progress-bar">
+            <div id="courage-progress" class="progress" style="width: 0%;"></div>
+          </div>
+          <span id="courage-value">0</span>
+        </div>
+        <div class="virtue-bar">
+          <span>Temperance:</span>
+          <div class="progress-bar">
+            <div id="temperance-progress" class="progress" style="width: 0%;"></div>
+          </div>
+          <span id="temperance-value">0</span>
+        </div>
+        <div class="virtue-bar">
+          <span>Justice:</span>
+          <div class="progress-bar">
+            <div id="justice-progress" class="progress" style="width: 0%;"></div>
+          </div>
+          <span id="justice-value">0</span>
+        </div>
+      </div>
+    </div>
+    
+    <button id="ui-toggle">Hide UI</button>
+    
+    <div class="controls">
+      <button id="btn-north">↑</button>
+      <button id="btn-west">←</button>
+      <div id="center-point"></div>
+      <button id="btn-east">→</button>
+      <button id="btn-south">↓</button>
+    </div>
+    
+    <div id="debug"></div>
+
+    <!-- Power details modal -->
+    <div id="power-details">
+      <h3 id="power-name"></h3>
+      <p id="power-description"></p>
+      <div id="power-stats"></div>
+      <div id="power-challenge"></div>
+      <div class="power-button-container">
+        <button id="btn-capture-power" class="power-button">Capture</button>
+        <button id="btn-close-power" class="power-button">Close</button>
+      </div>
+    </div>
+
+    <!-- Zoom controls -->
+    <div id="zoom-controls">
+      <button id="btn-zoom-in">+</button>
+      <button id="btn-zoom-out">-</button>
+    </div>
+  </div>
+
+  <!-- Load modular JavaScript -->
+  <script type="module" src="js/app.js"></script>
+  
+  <!-- UI Toggle Script -->
+  <script>
+    document.getElementById('ui-toggle').addEventListener('click', function() {
+      const panel = document.getElementById('status-panel');
+      const controls = document.querySelector('.controls');
+      const zoomControls = document.getElementById('zoom-controls');
+      
+      if (panel.style.display === 'none') {
+        panel.style.display = 'block';
+        controls.style.display = 'grid';
+        zoomControls.style.display = 'flex';
+        this.textContent = 'Hide UI';
+      } else {
+        panel.style.display = 'none';
+        controls.style.display = 'none';
+        zoomControls.style.display = 'none';
+        this.textContent = 'Show UI';
+      }
+    });
+
+    // Enable long press for movement buttons
+    const setupLongPress = (buttonId, moveFunction) => {
+      let interval;
+      let isHolding = false;
+      const button = document.getElementById(buttonId);
+      
+      if (!button) return;
+      
+      const startMove = () => {
+        isHolding = true;
+        moveFunction();
+        interval = setInterval(() => {
+          if (isHolding) moveFunction();
+        }, 100);
+      };
+      
+      const stopMove = () => {
+        isHolding = false;
+        clearInterval(interval);
+      };
+      
+      button.addEventListener('mousedown', startMove);
+      button.addEventListener('touchstart', startMove, { passive: true });
+      
+      document.addEventListener('mouseup', stopMove);
+      document.addEventListener('touchend', stopMove);
+      
+      // Prevent context menu on long press (mobile)
+      button.addEventListener('contextmenu', (e) => e.preventDefault());
+    };
+
+    // Loading screen handling
+    window.addEventListener('load', function() {
+      // Simulate loading progress
+      let progress = 0;
+      const progressBar = document.getElementById('progress-bar');
+      const loadingText = document.getElementById('loading-text');
+      const loadingScreen = document.getElementById('loading-screen');
+      
+      const loadingMessages = [
+        "Connecting to Atlantis...",
+        "Loading game assets...",
+        "Preparing world map...",
+        "Generating powers...",
+        "Creating zones...",
+        "Initializing virtue system..."
+      ];
+      
+      const interval = setInterval(function() {
+        progress += Math.random() * 15;
+        if (progress >= 100) {
+          progress = 100;
+          clearInterval(interval);
+          setTimeout(function() {
+            loadingScreen.style.opacity = 0;
+            setTimeout(function() {
+              loadingScreen.style.display = 'none';
+            }, 500);
+          }, 500);
+        }
+        progressBar.style.width = progress + '%';
+        
+        // Randomly change loading message
+        if (Math.random() < 0.2) {
+          const randomIndex = Math.floor(Math.random() * loadingMessages.length);
+          loadingText.textContent = loadingMessages[randomIndex];
+        }
+      }, 200);
+    });
+  </script>
+</body>
+</html> 

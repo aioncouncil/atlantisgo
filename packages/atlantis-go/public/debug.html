@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Atlantis Go - Debug Mode</title>
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.70.0/dist/phaser.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #111;
+      color: #fff;
+      font-family: Arial, sans-serif;
+    }
+    
+    #game-container {
+      width: 100%;
+      height: 100vh;
+    }
+    
+    #debug-panel {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      background-color: rgba(0, 0, 0, 0.7);
+      padding: 10px;
+      border-radius: 5px;
+      z-index: 1000;
+      max-width: 300px;
+      font-size: 12px;
+    }
+    
+    #controls {
+      position: fixed;
+      bottom: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 10px;
+      z-index: 1000;
+    }
+    
+    button {
+      background-color: #333;
+      color: #fff;
+      border: 1px solid #555;
+      padding: 8px 16px;
+      cursor: pointer;
+    }
+    
+    button:hover {
+      background-color: #444;
+    }
+
+    #console-output {
+      position: fixed;
+      bottom: 10px;
+      left: 10px;
+      background-color: rgba(0, 0, 0, 0.8);
+      padding: 10px;
+      border-radius: 5px;
+      z-index: 1000;
+      max-width: 600px;
+      max-height: 200px;
+      overflow-y: auto;
+      font-family: monospace;
+      font-size: 12px;
+    }
+    
+    .log {
+      color: #aaa;
+    }
+    
+    .info {
+      color: #7cf;
+    }
+    
+    .warn {
+      color: #fc7;
+    }
+    
+    .error {
+      color: #f77;
+    }
+  </style>
+</head>
+<body>
+  <div id="game-container"></div>
+  
+  <div id="debug-panel">
+    <h3>Debug Panel</h3>
+    <div id="connection-status">Standalone Mode</div>
+    <div id="player-info">Position: (0, 0)</div>
+    <div id="render-info">FPS: 0</div>
+  </div>
+  
+  <div id="controls">
+    <button id="btn-grid">Toggle Grid</button>
+    <button id="btn-test-entities">Test Entities</button>
+    <button id="btn-reconnect">Reconnect</button>
+  </div>
+  
+  <div id="console-output"></div>
+
+  <script>
+    // Override console methods to display in our custom console
+    const consoleOutput = document.getElementById('console-output');
+    const originalConsole = {
+      log: console.log,
+      info: console.info,
+      warn: console.warn,
+      error: console.error
+    };
+    
+    function appendToConsole(type, ...args) {
+      const message = args.map(arg => {
+        if (typeof arg === 'object') {
+          return JSON.stringify(arg);
+        } else {
+          return String(arg);
+        }
+      }).join(' ');
+      
+      const entry = document.createElement('div');
+      entry.className = type;
+      entry.textContent = `[${type.toUpperCase()}] ${message}`;
+      consoleOutput.appendChild(entry);
+      consoleOutput.scrollTop = consoleOutput.scrollHeight;
+    }
+    
+    console.log = function(...args) {
+      originalConsole.log(...args);
+      appendToConsole('log', ...args);
+    };
+    
+    console.info = function(...args) {
+      originalConsole.info(...args);
+      appendToConsole('info', ...args);
+    };
+    
+    console.warn = function(...args) {
+      originalConsole.warn(...args);
+      appendToConsole('warn', ...args);
+    };
+    
+    console.error = function(...args) {
+      originalConsole.error(...args);
+      appendToConsole('error', ...args);
+    };
+    
+    // Create a simple test scene that doesn't rely on external files
+    class DebugScene extends Phaser.Scene {
+      constructor() {
+        super({ key: 'DebugScene' });
+        console.log('DebugScene constructor called');
+        
+        this.playerPosition = { x: 0, y: 0 };
+        this.mapScale = 0.5;
+      }
+      
+      preload() {
+        console.log('Preloading assets...');
+        
+        // Generate a simple circle texture programmatically
+        const graphics = this.make.graphics();
+        graphics.fillStyle(0x3498db);
+        graphics.fillCircle(16, 16, 16);
+        graphics.generateTexture('player', 32, 32);
+        
+        graphics.clear();
+        graphics.fillStyle(0xe74c3c);
+        graphics.fillCircle(16, 16, 16);
+        graphics.generateTexture('power', 32, 32);
+        
+        graphics.clear();
+        graphics.fillStyle(0x2ecc71);
+        graphics.lineStyle(2, 0xffffff);
+        graphics.fillCircle(32, 32, 32);
+        graphics.strokeCircle(32, 32, 32);
+        graphics.generateTexture('zone', 64, 64);
+      }
+      
+      create() {
+        console.log('Creating scene...');
+        
+        // Create a grid background
+        this.createGrid();
+        
+        // Create the player
+        this.player = this.physics.add.sprite(0, 0, 'player');
+        this.player.setDepth(100);
+        
+        // Create test entities
+        this.createTestEntities();
+        
+        // Set up camera
+        this.cameras.main.setZoom(this.mapScale);
+        this.cameras.main.startFollow(this.player);
+        
+        // Set up controls
+        this.cursors = this.input.keyboard.createCursorKeys();
+        
+        // Debug text
+        this.debugText = this.add.text(10, 10, 'Debug Info', { 
+          font: '16px Arial', 
+          fill: '#ffffff',
+          backgroundColor: '#000000',
+          padding: { x: 10, y: 5 }
+        }).setScrollFactor(0).setDepth(1000);
+        
+        // Add event listeners for buttons
+        document.getElementById('btn-grid').addEventListener('click', () => {
+          this.toggleGrid();
+        });
+        
+        document.getElementById('btn-test-entities').addEventListener('click', () => {
+          this.createTestEntities();
+        });
+        
+        console.log('Scene created successfully!');
+      }
+      
+      update() {
+        // Handle keyboard input
+        if (this.cursors.left.isDown) {
+          this.player.x -= 5;
+        } else if (this.cursors.right.isDown) {
+          this.player.x += 5;
+        }
+        
+        if (this.cursors.up.isDown) {
+          this.player.y -= 5;
+        } else if (this.cursors.down.isDown) {
+          this.player.y += 5;
+        }
+        
+        // Update player position
+        this.playerPosition.x = this.player.x;
+        this.playerPosition.y = this.player.y;
+        
+        // Update debug text
+        this.debugText.setText(
+          `Position: (${Math.round(this.playerPosition.x)}, ${Math.round(this.playerPosition.y)})\n` +
+          `Scale: ${this.mapScale.toFixed(2)}\n` +
+          `FPS: ${Math.round(this.game.loop.actualFps)}`
+        );
+        
+        // Update player info in the debug panel
+        document.getElementById('player-info').textContent = `Position: (${Math.round(this.playerPosition.x)}, ${Math.round(this.playerPosition.y)})`;
+        document.getElementById('render-info').textContent = `FPS: ${Math.round(this.game.loop.actualFps)}`;
+      }
+      
+      createGrid() {
+        const graphics = this.add.graphics();
+        const gridSize = 100;
+        const mapSize = 2000;
+        
+        graphics.lineStyle(1, 0x444444, 0.5);
+        
+        // Draw vertical lines
+        for (let x = -mapSize; x <= mapSize; x += gridSize) {
+          graphics.moveTo(x, -mapSize);
+          graphics.lineTo(x, mapSize);
+        }
+        
+        // Draw horizontal lines
+        for (let y = -mapSize; y <= mapSize; y += gridSize) {
+          graphics.moveTo(-mapSize, y);
+          graphics.lineTo(mapSize, y);
+        }
+        
+        // Draw origin
+        graphics.lineStyle(2, 0x0000ff, 1);
+        graphics.strokeCircle(0, 0, 50);
+        
+        this.add.text(0, 0, 'ORIGIN', {
+          font: '16px Arial',
+          fill: '#ffffff'
+        }).setOrigin(0.5, 0.5);
+        
+        this.gridGraphics = graphics;
+      }
+      
+      toggleGrid() {
+        this.gridGraphics.visible = !this.gridGraphics.visible;
+      }
+      
+      createTestEntities() {
+        // Clear existing entities
+        if (this.entities) {
+          this.entities.forEach(entity => entity.destroy());
+        }
+        
+        this.entities = [];
+        
+        // Create powers
+        for (let i = 0; i < 10; i++) {
+          const x = (Math.random() - 0.5) * 1000;
+          const y = (Math.random() - 0.5) * 1000;
+          const power = this.physics.add.sprite(x, y, 'power');
+          power.setDepth(20);
+          this.entities.push(power);
+        }
+        
+        // Create zones
+        for (let i = 0; i < 3; i++) {
+          const x = (Math.random() - 0.5) * 800;
+          const y = (Math.random() - 0.5) * 800;
+          const zone = this.add.image(x, y, 'zone');
+          zone.setDepth(10);
+          zone.setAlpha(0.6);
+          this.entities.push(zone);
+        }
+        
+        console.log(`Created ${this.entities.length} test entities`);
+      }
+    }
+    
+    // Configure and start the game
+    const config = {
+      type: Phaser.AUTO,
+      width: window.innerWidth,
+      height: window.innerHeight,
+      backgroundColor: '#000000',
+      parent: 'game-container',
+      physics: {
+        default: 'arcade',
+        arcade: {
+          gravity: { x: 0, y: 0 },
+          debug: true
+        }
+      },
+      scene: [DebugScene]
+    };
+    
+    const game = new Phaser.Game(config);
+    
+    // Handle window resize
+    window.addEventListener('resize', () => {
+      game.scale.resize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html> 

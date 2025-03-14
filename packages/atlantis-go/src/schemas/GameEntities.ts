@@ -7,7 +7,7 @@
  */
 
 import { Schema, type, MapSchema, ArraySchema } from '@colyseus/schema';
-import { Position, VirtuePoints, UserMetadata } from './index';
+import { Position, VirtuePoints, UserMetadata } from './index.js';
 import { nanoid } from 'nanoid';
 
 /**
@@ -93,7 +93,10 @@ export class Power extends Schema {
   @type("number") spawnTime: number = Date.now();
   @type("number") despawnTime: number = 0; // 0 means no despawn scheduled
   @type("boolean") isActive: boolean = true;
-  @type("number") captureChallenge: number = 1; // 1-100 difficulty to capture
+  @type("number") challengeDifficulty: number = 1; // 1-100 difficulty to capture
+  
+  // Store the full challenge details separately (not synced directly)
+  captureChallenge: any;
 
   constructor(
     id: string, 
@@ -111,7 +114,7 @@ export class Power extends Schema {
     this.rarity = rarity;
     this.matrixQuadrant = matrixQuadrant;
     this.position = position;
-    this.captureChallenge = captureChallenge;
+    this.challengeDifficulty = captureChallenge;
   }
 
   /**
@@ -128,6 +131,11 @@ export class Power extends Schema {
    */
   setCaptureChallenge(challenge: any): void {
     this.captureChallenge = challenge;
+    
+    // Also set the difficulty value that will be synced
+    if (challenge && challenge.difficulty) {
+      this.challengeDifficulty = challenge.difficulty;
+    }
   }
 
   /**

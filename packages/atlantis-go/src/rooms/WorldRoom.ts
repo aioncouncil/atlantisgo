@@ -10,9 +10,9 @@
  */
 
 import { Room, Client, Delayed, ServerError } from '@colyseus/core';
-import { WorldState } from '../schemas/WorldState';
-import { Player, Power, Zone } from '../schemas/GameEntities';
-import { Position, UserMetadata, VirtuePoints } from '../schemas/index';
+import { WorldState } from '../schemas/WorldState.js';
+import { Player, Power, Zone } from '../schemas/GameEntities.js';
+import { Position, UserMetadata, VirtuePoints } from '../schemas/index.js';
 import { nanoid } from 'nanoid';
 
 // Define RoomOptions type
@@ -379,7 +379,6 @@ export class WorldRoom extends Room<WorldState> {
     // to the philosophical challenge
     
     // For now, implement a simple evaluation based on response length and rarity
-    const challenge = power.captureChallenge as unknown as CaptureChallenge;
     let baseSuccessRate = 0;
     
     switch (power.rarity) {
@@ -393,6 +392,9 @@ export class WorldRoom extends Room<WorldState> {
     
     // Very simple response quality evaluation based on type
     let responseQuality = 0;
+    
+    const challenge = power.captureChallenge;
+    if (!challenge) return baseSuccessRate;
     
     if (challenge.type === "reflection" || challenge.type === "virtue" || 
         challenge.type === "philosophical" || challenge.type === "wisdom") {
@@ -427,6 +429,12 @@ export class WorldRoom extends Room<WorldState> {
       maxPlayers: options.maxPlayers || 100,
       regionId: options.regionId || 'global'
     });
+
+    // Create some initial test zones
+    this.createInitialZones();
+    
+    // Spawn initial powers
+    this.spawnPowers();
     
     // Enable presence features
     this.setSimulationInterval((deltaTime) => this.update(deltaTime));
@@ -438,6 +446,46 @@ export class WorldRoom extends Room<WorldState> {
     this.startScheduledTasks();
     
     console.log('World Room created successfully');
+  }
+  
+  /**
+   * Create initial test zones
+   */
+  private createInitialZones() {
+    // Create a central zone
+    const centerZone = new Zone(
+      'zone_center',
+      'Atlantis Central',
+      'hub',
+      new Position(0, 0),
+      200
+    );
+    centerZone.description = 'The central hub of Atlantis Go';
+    this.state.zones.set(centerZone.id, centerZone);
+    
+    // Create some surrounding zones
+    const zonePositions = [
+      { x: 500, y: 0, name: 'Eastern District', type: 'residential' },
+      { x: -500, y: 0, name: 'Western Gardens', type: 'nature' },
+      { x: 0, y: 500, name: 'Northern Heights', type: 'education' },
+      { x: 0, y: -500, name: 'Southern Market', type: 'commercial' }
+    ];
+    
+    zonePositions.forEach((zPos, index) => {
+      const zoneId = `zone_${index + 1}`;
+      const position = new Position(zPos.x, zPos.y);
+      const zone = new Zone(
+        zoneId,
+        zPos.name,
+        zPos.type,
+        position,
+        150
+      );
+      zone.description = `A ${zPos.type} area in the world of Atlantis`;
+      this.state.zones.set(zoneId, zone);
+    });
+    
+    console.log(`Created ${this.state.zones.size} initial zones`);
   }
   
   /**
