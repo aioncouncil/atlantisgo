@@ -1,0 +1,448 @@
+/**
+ * MasterControlPanel.css
+ * Styles for the developer control panel with Apple-inspired design
+ */
+
+/* No import here - CSS is loaded via JavaScript */
+
+.mcp-panel {
+  display: flex;
+  flex-direction: column;
+  background: rgba(28, 28, 30, 0.85);
+  -webkit-backdrop-filter: blur(var(--backdrop-blur));
+  -moz-backdrop-filter: blur(var(--backdrop-blur));
+  -o-backdrop-filter: blur(var(--backdrop-blur));
+  backdrop-filter: blur(var(--backdrop-blur));
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  overflow: hidden;
+  resize: both;
+  transition: all var(--transition-normal);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.mcp-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: rgba(44, 44, 46, 0.8);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  cursor: grab;
+  user-select: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.mcp-title {
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+  color: var(--accent-teal);
+}
+
+.mcp-controls {
+  display: flex;
+  gap: var(--spacing-xs);
+}
+
+.mcp-btn {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  cursor: pointer;
+  font-size: var(--font-size-xs);
+  font-family: var(--font-family);
+  transition: all var(--transition-fast);
+}
+
+.mcp-btn:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.mcp-minimize,
+.mcp-close {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  padding: 0;
+  border-radius: 50%;
+}
+
+.mcp-close {
+  background-color: var(--accent-red);
+  color: rgba(0, 0, 0, 0.5);
+}
+
+.mcp-close:hover {
+  background-color: var(--accent-red);
+  filter: brightness(1.1);
+}
+
+.mcp-tabs-nav {
+  display: flex;
+  background-color: rgba(44, 44, 46, 0.4);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  overflow-x: auto;
+}
+
+.mcp-tab-btn {
+  background: none;
+  border: none;
+  padding: var(--spacing-sm) var(--spacing-md);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  font-size: var(--font-size-xs);
+  font-family: var(--font-family);
+  font-weight: 500;
+  transition: all var(--transition-fast);
+  position: relative;
+}
+
+.mcp-tab-btn:hover {
+  color: var(--text-secondary);
+}
+
+.mcp-tab-btn.active {
+  color: var(--accent-blue);
+}
+
+.mcp-tab-btn.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background-color: var(--accent-blue);
+  border-radius: 999px;
+}
+
+.mcp-tabs-content {
+  flex: 1;
+  overflow: hidden;
+}
+
+.mcp-tab-content {
+  display: none;
+  height: 100%;
+  flex-direction: column;
+  padding: 0;
+}
+
+/* Console Tab */
+.mcp-console-controls {
+  display: flex;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm);
+  background-color: rgba(44, 44, 46, 0.4);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.mcp-console-output {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--spacing-sm);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+  height: calc(100% - 40px);
+  background-color: rgba(28, 28, 30, 0.6);
+  font-family: var(--font-mono);
+}
+
+.mcp-console-entry {
+  margin-bottom: var(--spacing-xs);
+  padding-bottom: var(--spacing-xs);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  word-break: break-word;
+  animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.mcp-time {
+  color: var(--text-tertiary);
+  margin-right: var(--spacing-sm);
+  font-size: 11px;
+}
+
+.mcp-log {
+  color: var(--text-primary);
+}
+
+.mcp-warn {
+  color: var(--accent-yellow);
+}
+
+.mcp-error {
+  color: var(--accent-red);
+}
+
+.mcp-info {
+  color: var(--accent-blue);
+}
+
+.mcp-log-icon::before {
+  content: "🔹";
+  margin-right: 5px;
+}
+
+.mcp-warn-icon::before {
+  content: "⚠️";
+  margin-right: 5px;
+}
+
+.mcp-error-icon::before {
+  content: "❌";
+  margin-right: 5px;
+}
+
+.mcp-info-icon::before {
+  content: "ℹ️";
+  margin-right: 5px;
+}
+
+/* Navigation Tab */
+.mcp-nav-links {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+}
+
+.mcp-nav-btn {
+  background-color: rgba(10, 132, 255, 0.1);
+  color: var(--accent-blue);
+  border: none;
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  font-family: var(--font-family);
+  font-weight: 500;
+  text-align: left;
+  transition: all var(--transition-fast);
+  display: flex;
+  align-items: center;
+}
+
+.mcp-nav-btn:hover {
+  background-color: rgba(10, 132, 255, 0.2);
+  transform: translateY(-2px);
+}
+
+.mcp-nav-btn:active {
+  transform: translateY(0);
+}
+
+.mcp-nav-btn::after {
+  content: "→";
+  margin-left: auto;
+  opacity: 0.7;
+}
+
+/* Server Tab */
+.mcp-server-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  background-color: rgba(44, 44, 46, 0.4);
+}
+
+.mcp-server-status {
+  padding: var(--spacing-md);
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+}
+
+#mcp-server-status {
+  font-weight: 600;
+  display: inline-block;
+}
+
+#mcp-server-status:empty:after {
+  content: "Unknown";
+  color: var(--text-tertiary);
+}
+
+#mcp-connect-btn {
+  background-color: rgba(48, 209, 88, 0.1);
+  color: var(--accent-green);
+}
+
+#mcp-disconnect-btn {
+  background-color: rgba(255, 69, 58, 0.1);
+  color: var(--accent-red);
+}
+
+#mcp-spawn-powers-btn {
+  background-color: rgba(94, 92, 230, 0.1);
+  color: var(--accent-indigo);
+}
+
+/* Game State Tab */
+.mcp-state-controls {
+  display: flex;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md);
+  align-items: center;
+  background-color: rgba(44, 44, 46, 0.4);
+}
+
+.mcp-state-viewer {
+  padding: var(--spacing-md);
+  overflow: auto;
+  flex: 1;
+  background-color: rgba(28, 28, 30, 0.6);
+}
+
+.mcp-state-tree {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+/* Checkbox styling */
+input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--divider);
+  outline: none;
+  cursor: pointer;
+  position: relative;
+  vertical-align: middle;
+  margin-right: var(--spacing-xs);
+}
+
+input[type="checkbox"]:checked {
+  background-color: var(--accent-blue);
+  border-color: var(--accent-blue);
+}
+
+input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 6px;
+  width: 5px;
+  height: 10px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+/* Performance Tab */
+.mcp-performance-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--spacing-md);
+  padding: var(--spacing-md);
+}
+
+.mcp-metric {
+  background: rgba(44, 44, 46, 0.5);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: all var(--transition-fast);
+}
+
+.mcp-metric:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-sm);
+}
+
+.mcp-metric-label {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  margin-bottom: var(--spacing-xs);
+  font-weight: 500;
+}
+
+.mcp-metric-value {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  background: linear-gradient(90deg, var(--accent-blue), var(--accent-teal));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* JSON syntax highlighting */
+.json-key {
+  color: var(--accent-pink);
+}
+
+.json-string {
+  color: var(--accent-green);
+}
+
+.json-number {
+  color: var(--accent-orange);
+}
+
+.json-boolean {
+  color: var(--accent-indigo);
+}
+
+.json-null {
+  color: var(--accent-red);
+}
+
+/* Tab icons styling */
+.mcp-tab-icon {
+  margin-right: var(--spacing-xs);
+  opacity: 0.7;
+}
+
+.mcp-tab-btn.active .mcp-tab-icon {
+  opacity: 1;
+}
+
+.mcp-nav-icon {
+  margin-right: var(--spacing-md);
+}
+
+/* Search input styling */
+.mcp-search-input {
+  flex: 1;
+  max-width: 200px;
+  height: 28px;
+  margin-left: auto;
+  font-size: var(--font-size-xs);
+  background-color: rgba(0, 0, 0, 0.2);
+}
+
+/* Responsive adjustments */
+@media (max-width: 600px) {
+  .mcp-panel {
+    width: 90% !important;
+    height: 80% !important;
+  }
+  
+  .mcp-tabs-nav {
+    flex-wrap: wrap;
+  }
+  
+  .mcp-tab-btn {
+    flex-grow: 1;
+  }
+  
+  .mcp-performance-metrics {
+    grid-template-columns: 1fr;
+  }
+} 

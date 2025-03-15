@@ -44,80 +44,100 @@ export class WorldScene extends Phaser.Scene {
     
     // Flag for backup textures
     this.usingBackupTextures = false;
+    
+    // Track loaded textures
+    this.texturesLoaded = false;
+    
+    // Entity groups for better performance
+    this.entityGroups = {
+      players: null,
+      powers: null,
+      zones: null
+    };
+    
+    // Throttle update counters
+    this.updateCounter = 0;
+    this.updateFrequency = 5; // Only update UI elements every 5 frames
   }
 
   preload() {
     console.log('WorldScene preload started');
     
     try {
-      // Create backup textures in case loading fails
-      console.log('Creating backup textures');
+      // Create backup textures first as a fallback
       this.createBackupTextures();
       
-      // Check image data validity
-      console.log('Checking image data validity');
-      const isPlayerValid = playerImageData && playerImageData.length > 1000;
-      const isOtherPlayerValid = otherPlayerImageData && otherPlayerImageData.length > 1000;
-      const isPowerValid = powerImageData && powerImageData.length > 1000;
+      // Use Promise.all to load all textures concurrently
+      const loadTexturePromises = [
+        this.loadTextureAsync('player', playerImageData, 0x3498db),
+        this.loadTextureAsync('otherPlayer', otherPlayerImageData, 0xe74c3c),
+        this.loadTextureAsync('power', powerImageData, 0xf1c40f)
+      ];
       
-      console.log(`Player image data valid: ${isPlayerValid}`);
-      console.log(`Other player image data valid: ${isOtherPlayerValid}`);
-      console.log(`Power image data valid: ${isPowerValid}`);
-      
-      // Better texture loading with multiple fallback approaches
-      const loadTexture = (key, imageData, fallbackColor) => {
-        if (!imageData || imageData.length < 1000) {
-          console.log(`Invalid image data for ${key}, using fallback`);
-          this.createColoredTexture(key, fallbackColor);
-          return;
-        }
-        
-        try {
-          // First attempt: Use Phaser's built-in texture loading
-          this.textures.addBase64(key, imageData);
-          console.log(`Successfully loaded ${key} texture via addBase64`);
-        } catch (error) {
-          console.error(`Failed to load ${key} via addBase64:`, error);
-          
-          try {
-            // Second attempt: Create an image element and use it as texture
-            const img = new Image();
-            img.onload = () => {
-              this.textures.addImage(key, img);
-              console.log(`Successfully loaded ${key} texture via Image element`);
-            };
-            img.onerror = () => {
-              console.error(`Failed to load ${key} via Image element`);
-              this.createColoredTexture(key, fallbackColor);
-            };
-            img.src = imageData;
-          } catch (innerError) {
-            console.error(`All attempts to load ${key} failed:`, innerError);
-            this.createColoredTexture(key, fallbackColor);
-          }
-        }
-      };
-      
-      // Load textures with fallbacks
-      loadTexture('player', playerImageData, 0x3498db);
-      loadTexture('otherPlayer', otherPlayerImageData, 0xe74c3c);
-      loadTexture('power', powerImageData, 0xf1c40f);
+      Promise.all(loadTexturePromises)
+        .then(() => {
+          console.log('All textures loaded successfully');
+          this.texturesLoaded = true;
+        })
+        .catch(error => {
+          console.error('Error loading textures:', error);
+          this.usingBackupTextures = true;
+        });
       
       // Create a simple particle texture for effects
       const particleGraphics = this.make.graphics({ x: 0, y: 0, add: false });
       particleGraphics.fillStyle(0xffffff, 1);
       particleGraphics.fillCircle(8, 8, 8);
       particleGraphics.generateTexture('particle', 16, 16);
-      console.log('Created particle texture');
       
       // Create zone textures
       this.createZoneTextures();
-      console.log('Created zone textures');
       
     } catch (error) {
       console.error('Error in preload:', error);
       this.usingBackupTextures = true;
     }
+  }
+  
+  // Improved async texture loading
+  loadTextureAsync(key, imageData, fallbackColor) {
+    return new Promise((resolve, reject) => {
+      if (!imageData || imageData.length < 1000) {
+        console.log(`Invalid image data for ${key}, using fallback`);
+        this.createColoredTexture(key, fallbackColor);
+        resolve();
+        return;
+      }
+      
+      try {
+        // Create an image element and use it as texture
+        const img = new Image();
+        
+        img.onload = () => {
+          try {
+            this.textures.addImage(key, img);
+            console.log(`Successfully loaded ${key} texture`);
+            resolve();
+          } catch (err) {
+            console.error(`Failed to add ${key} texture:`, err);
+            this.createColoredTexture(key, fallbackColor);
+            resolve();
+          }
+        };
+        
+        img.onerror = () => {
+          console.error(`Failed to load ${key} image`);
+          this.createColoredTexture(key, fallbackColor);
+          resolve();
+        };
+        
+        img.src = imageData;
+      } catch (error) {
+        console.error(`Error loading ${key} texture:`, error);
+        this.createColoredTexture(key, fallbackColor);
+        resolve();
+      }
+    });
   }
 
   // Helper method to create a simple colored texture
@@ -136,42 +156,41 @@ export class WorldScene extends Phaser.Scene {
     console.log('WorldScene create called');
     
     try {
-      // Create grid background
+      // Create grid background - less detailed for better performance
       this.createGridBackground();
-      console.log('Grid background created');
       
       // Create coordinate axes
       this.createCoordinateAxes();
-      console.log('Coordinate axes created');
       
       // Create a world with bounds
       this.physics.world.setBounds(-this.worldSize.width/2, -this.worldSize.height/2, 
                                    this.worldSize.width, this.worldSize.height);
-      console.log('World bounds set');
+      
+      // Create entity groups for better performance
+      this.entityGroups.players = this.add.group();
+      this.entityGroups.powers = this.add.group();
+      this.entityGroups.zones = this.add.group();
       
       // Create the player entity
       this.createPlayer();
-      console.log('Player entity created');
       
       // Setup controls
       this.setupControls();
-      console.log('Controls set up');
       
       // Initialize long press for touch controls if needed
       this.initTouchControls();
-      console.log('Touch controls initialized');
       
       // Setup other UI
       this.setupMiniMap();
-      console.log('Mini-map set up');
       
       // Set up network handlers
       this.setupNetworkHandlers();
-      console.log('Network handlers set up');
       
       // Connect UI buttons
       this.connectUIButtons();
-      console.log('UI buttons connected');
+      
+      // Add performance optimization - reduce WebGL batches
+      this.game.renderer.pipeline.setMaxBatchSize(4096);
       
       console.log('WorldScene create completed successfully');
     } catch (error) {
@@ -180,138 +199,63 @@ export class WorldScene extends Phaser.Scene {
   }
 
   update() {
+    // Only update UI elements every few frames for better performance
+    this.updateCounter = (this.updateCounter + 1) % this.updateFrequency;
+    
     // Update player if exists
     if (this.player) {
-      // Update mini-map with player position
-      this.updateMiniMap();
-      
-      // Update debug text
-      if (this.debugText) {
-        this.debugText.setText(
-          `Position: (${Math.round(this.playerPosition.x)}, ${Math.round(this.playerPosition.y)})\n` +
-          `Camera Offset: (${Math.round(this.cameraOffset.x)}, ${Math.round(this.cameraOffset.y)})\n` +
-          `Scale: ${this.mapScale.toFixed(2)}\n` +
-          `Entities: P:${Object.keys(this.entities.players).length} Z:${Object.keys(this.entities.zones).length} Pow:${Object.keys(this.entities.powers).length}`
-        );
+      // Update mini-map with player position, but only every few frames
+      if (this.updateCounter === 0) {
+        this.updateMiniMap();
+        
+        // Update debug text
+        if (this.debugText) {
+          this.debugText.setText(
+            `Position: (${Math.round(this.playerPosition.x)}, ${Math.round(this.playerPosition.y)})\n` +
+            `Camera Offset: (${Math.round(this.cameraOffset.x)}, ${Math.round(this.cameraOffset.y)})\n` +
+            `Scale: ${this.mapScale.toFixed(2)}\n` +
+            `Entities: P:${Object.keys(this.entities.players).length} Z:${Object.keys(this.entities.zones).length} Pow:${Object.keys(this.entities.powers).length}`
+          );
+        }
       }
     }
   }
 
   createGridBackground() {
-    console.log('Creating grid background');
+    // Simplified grid for better performance
+    const gridSize = 100;
+    const gridAlpha = 0.2;
     
-    // Make sure worldSize is defined
-    if (!this.worldSize) {
-      this.worldSize = { width: this.worldSize.width / 2, height: this.worldSize.height / 2 };
-      console.log('Initialized worldSize as fallback', this.worldSize);
+    // Create a graphics object for the grid
+    const grid = this.add.graphics();
+    
+    // Draw grid lines - reduce the number of lines for better performance
+    grid.lineStyle(1, 0xffffff, gridAlpha);
+    
+    // Calculate grid dimensions based on visible area
+    const visibleWidth = this.cameras.main.width * 2;
+    const visibleHeight = this.cameras.main.height * 2;
+    
+    // Draw horizontal lines
+    for (let y = -visibleHeight; y <= visibleHeight; y += gridSize) {
+      grid.moveTo(-visibleWidth, y);
+      grid.lineTo(visibleWidth, y);
     }
     
-    // Create a layered background for depth effect
-    // Deep background
-    this.add.rectangle(0, 0, this.worldSize.width * 2.5, this.worldSize.height * 2.5, 0x0a0a18).setOrigin(0.5);
-    
-    // Add a subtle gradient overlay using multiple transparent rectangles
-    const gradientSteps = 8;
-    const gradientWidth = this.worldSize.width * 2;
-    const gradientHeight = this.worldSize.height * 2;
-    
-    for (let i = 0; i < gradientSteps; i++) {
-      const ratio = i / gradientSteps;
-      const size = 1 - (ratio * 0.5);
-      const alpha = 0.03 + (ratio * 0.02);
-      
-      this.add.rectangle(
-        0, 0, 
-        gradientWidth * size, 
-        gradientHeight * size, 
-        0x3a5ba9, 
-        alpha
-      ).setOrigin(0.5);
+    // Draw vertical lines
+    for (let x = -visibleWidth; x <= visibleWidth; x += gridSize) {
+      grid.moveTo(x, -visibleHeight);
+      grid.lineTo(x, visibleHeight);
     }
     
-    // Create a more polished grid
-    const gridSize = 200; // Larger grid cells for cleaner look
-    const minorGridSize = 50; // Minor grid lines
+    grid.strokePath();
     
-    // Create graphics objects for different grid layers
-    const majorGrid = this.add.graphics();
-    const minorGrid = this.add.graphics();
+    // Add a background to make grid more visible
+    const bg = this.add.rectangle(0, 0, visibleWidth * 2, visibleHeight * 2, 0x111111);
+    bg.setDepth(-10);
     
-    // Draw minor grid
-    minorGrid.lineStyle(1, 0x3a4a6a, 0.15);
-    
-    for (let x = -this.worldSize.width; x <= this.worldSize.width; x += minorGridSize) {
-      minorGrid.beginPath();
-      minorGrid.moveTo(x, -this.worldSize.height);
-      minorGrid.lineTo(x, this.worldSize.height);
-      minorGrid.strokePath();
-    }
-    
-    for (let y = -this.worldSize.height; y <= this.worldSize.height; y += minorGridSize) {
-      minorGrid.beginPath();
-      minorGrid.moveTo(-this.worldSize.width, y);
-      minorGrid.lineTo(this.worldSize.width, y);
-      minorGrid.strokePath();
-    }
-    
-    // Draw major grid lines
-    majorGrid.lineStyle(2, 0x5a6a8a, 0.3);
-    
-    for (let x = -this.worldSize.width; x <= this.worldSize.width; x += gridSize) {
-      majorGrid.beginPath();
-      majorGrid.moveTo(x, -this.worldSize.height);
-      majorGrid.lineTo(x, this.worldSize.height);
-      majorGrid.strokePath();
-    }
-    
-    for (let y = -this.worldSize.height; y <= this.worldSize.height; y += gridSize) {
-      majorGrid.beginPath();
-      majorGrid.moveTo(-this.worldSize.width, y);
-      majorGrid.lineTo(this.worldSize.width, y);
-      majorGrid.strokePath();
-    }
-    
-    // Add coordinate system with fade-out effect
-    const axisGraphics = this.add.graphics();
-    
-    // X and Y axes with thicker lines
-    axisGraphics.lineStyle(3, 0x6a8ac9, 0.6);
-    
-    // X axis
-    axisGraphics.beginPath();
-    axisGraphics.moveTo(-this.worldSize.width, 0);
-    axisGraphics.lineTo(this.worldSize.width, 0);
-    axisGraphics.strokePath();
-    
-    // Y axis
-    axisGraphics.beginPath();
-    axisGraphics.moveTo(0, -this.worldSize.height);
-    axisGraphics.lineTo(0, this.worldSize.height);
-    axisGraphics.strokePath();
-    
-    // Add subtle circular markers at grid intersections for visual interest
-    const intersectionMarkers = this.add.graphics();
-    intersectionMarkers.fillStyle(0x5a6a8a, 0.2);
-    
-    for (let x = -this.worldSize.width; x <= this.worldSize.width; x += gridSize) {
-      for (let y = -this.worldSize.height; y <= this.worldSize.height; y += gridSize) {
-        // Make markers at the origin more prominent
-        const distance = Math.sqrt(x*x + y*y);
-        const size = Math.max(1, 5 - (distance / 2000));
-        const alpha = Math.max(0.1, 0.3 - (distance / 15000));
-        
-        intersectionMarkers.fillStyle(0x6a8ac9, alpha);
-        intersectionMarkers.fillCircle(x, y, size);
-      }
-    }
-    
-    // Set the depth of the backgrounds to be behind other elements
-    minorGrid.setDepth(-10);
-    majorGrid.setDepth(-9);
-    axisGraphics.setDepth(-8);
-    intersectionMarkers.setDepth(-7);
-    
-    console.log('Enhanced grid background created');
+    // Move grid to bottom layer
+    grid.setDepth(-5);
   }
 
   createCoordinateAxes() {

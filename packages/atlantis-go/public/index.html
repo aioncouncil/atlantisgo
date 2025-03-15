@@ -159,6 +159,37 @@
       z-index: 100;
       pointer-events: none;
     }
+    
+    /* Power Collection button style */
+    #btn-power-collection {
+      position: fixed;
+      top: 10px;
+      right: 100px;
+      background-color: rgba(0, 122, 255, 0.8);
+      color: #fff;
+      padding: 8px 12px;
+      border-radius: 5px;
+      z-index: 1001;
+      cursor: pointer;
+      font-size: 14px;
+      border: none;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+      pointer-events: auto;
+      display: flex;
+      align-items: center;
+    }
+    
+    #btn-power-collection:active {
+      background-color: rgba(0, 100, 210, 0.9);
+      transform: scale(0.98);
+    }
+    
+    #btn-power-collection svg {
+      width: 16px;
+      height: 16px;
+      margin-right: 5px;
+      fill: currentColor;
+    }
   </style>
 </head>
 <body>
@@ -221,6 +252,14 @@
     </div>
     
     <button id="ui-toggle">Hide UI</button>
+    
+    <!-- Power Collection Button -->
+    <button id="btn-power-collection">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+        <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
+      </svg>
+      Powers
+    </button>
     
     <div class="controls">
       <button id="btn-north">↑</button>
@@ -342,6 +381,21 @@
           loadingText.textContent = loadingMessages[randomIndex];
         }
       }, 200);
+    });
+  </script>
+  
+  <!-- Import the Power Collection component -->
+  <script type="module">
+    import { PowerCollection } from './components/PowerCollection.js';
+    
+    document.addEventListener('DOMContentLoaded', () => {
+      // The PowerCollection component is now initialized from the app.js file
+      // We don't need to handle it here anymore
+      
+      // For backward compatibility, we'll keep the window methods
+      window.initPowerCollection = (container, room) => {
+        console.warn('PowerCollection is now initialized from app.js');
+      };
     });
   </script>
 </body>

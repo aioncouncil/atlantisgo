@@ -6,10 +6,14 @@ import { DEBUG_MODE, ZONE_TYPES } from './constants.js';
 import { network } from './network.js';
 import { ui } from './ui.js';
 import { game } from './game.js';
+import { PowerCollection } from '../components/PowerCollection.js';
+import { MasterControlPanel } from '../components/MasterControlPanel.js';
 
 class Application {
   constructor() {
     this.initialized = false;
+    this.powerCollection = null;
+    this.masterControlPanel = null;
   }
 
   /**
@@ -43,6 +47,16 @@ class Application {
     // Initialize the Phaser game
     console.log('Initializing Phaser game...');
     game.initialize();
+
+    // Initialize PowerCollection component
+    console.log('Initializing Power Collection...');
+    this._setupPowerCollection();
+    
+    // Initialize Master Control Panel for development
+    if (DEBUG_MODE) {
+      console.log('Initializing Master Control Panel...');
+      this._setupMasterControlPanel();
+    }
     
     this.initialized = true;
     console.log('Application fully initialized');
@@ -59,12 +73,22 @@ class Application {
       console.log('Network event: onConnect');
       ui.updateConnectionStatus(true);
       ui.log('Connected to server');
+      
+      // Update MCP server status if available
+      if (this.masterControlPanel) {
+        this.masterControlPanel.updateServerStatus('Connected');
+      }
     });
     
     network.on('onDisconnect', (code) => {
       console.log('Network event: onDisconnect with code', code);
       ui.updateConnectionStatus(false);
       ui.log('Disconnected from server', true);
+      
+      // Update MCP server status if available
+      if (this.masterControlPanel) {
+        this.masterControlPanel.updateServerStatus('Disconnected');
+      }
     });
     
     network.on('onError', (message) => {
@@ -102,7 +126,92 @@ class Application {
     network.on('onPowerCaptured', (message) => {
       console.log('Network event: onPowerCaptured', message);
       ui.log(`Captured power: ${message.powerName}!`);
+      
+      // Update power collection if initialized
+      if (this.powerCollection) {
+        this.powerCollection.updatePowers();
+      }
     });
+    
+    network.on('onPowerDetails', (message) => {
+      console.log('Network event: onPowerDetails', message);
+      ui.showPowerDetails(message.power);
+    });
+  }
+
+  /**
+   * Initialize and set up the PowerCollection component
+   * @private
+   */
+  _setupPowerCollection() {
+    // Create power collection component
+    const container = document.body;
+    this.powerCollection = new PowerCollection(container, network.room);
+    
+    // Ensure it's completely hidden initially
+    this.powerCollection.hide();
+    
+    // Set up the power collection button
+    const powerCollectionButton = document.getElementById('btn-power-collection');
+    if (powerCollectionButton) {
+      powerCollectionButton.addEventListener('click', () => {
+        if (this.powerCollection) {
+          if (this.powerCollection.visible) {
+            this.powerCollection.hide();
+          } else {
+            this.powerCollection.show();
+          }
+        }
+      });
+    }
+  }
+  
+  /**
+   * Initialize and set up the MasterControlPanel component
+   * @private
+   */
+  _setupMasterControlPanel() {
+    // Load CSS for MCP
+    this._loadMcpStyles();
+    
+    // Create master control panel component
+    const container = document.body;
+    this.masterControlPanel = new MasterControlPanel(container, {
+      defaultTab: 'console',
+      captureConsole: true,
+      showPerformance: true,
+      position: { top: '20px', right: '20px' }
+    });
+    
+    // Inform user about the shortcut
+    ui.log('Developer tools available (Ctrl+M to toggle)', false);
+    
+    // Update server status
+    if (network && network.room) {
+      this.masterControlPanel.updateServerStatus('Connected');
+    } else {
+      this.masterControlPanel.updateServerStatus('Disconnected');
+    }
+  }
+  
+  /**
+   * Load CSS for Master Control Panel
+   * @private
+   */
+  _loadMcpStyles() {
+    // Load Apple design system styles first
+    const appleStyleLink = document.createElement('link');
+    appleStyleLink.rel = 'stylesheet';
+    appleStyleLink.type = 'text/css';
+    appleStyleLink.href = './css/apple-style.css';
+    document.head.appendChild(appleStyleLink);
+    
+    // Then load MCP specific styles
+    const mcpStyleLink = document.createElement('link');
+    mcpStyleLink.rel = 'stylesheet';
+    mcpStyleLink.type = 'text/css';
+    mcpStyleLink.href = './components/MasterControlPanel.css';
+    document.head.appendChild(mcpStyleLink);
   }
 }
 

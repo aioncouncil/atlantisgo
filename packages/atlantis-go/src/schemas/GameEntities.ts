@@ -8,6 +8,7 @@
 
 import { Schema, type, MapSchema, ArraySchema } from '@colyseus/schema';
 import { Position, VirtuePoints, UserMetadata } from './index.js';
+import { PowerCollection } from './PowerSchema.js';
 import { nanoid } from 'nanoid';
 
 /**
@@ -22,6 +23,10 @@ export class Player extends Schema {
   @type("boolean") isActive: boolean = true;
   @type("number") lastActivity: number = Date.now();
   @type("string") state: string = "idle"; // idle, moving, interacting, capturing
+  @type({ map: PowerCollection }) powers = new MapSchema<PowerCollection>();
+  @type("number") rank: number = 1;
+  @type("number") xp: number = 0;
+  @type("number") coins: number = 0;
 
   constructor(id: string, metadata: UserMetadata) {
     super();
@@ -55,10 +60,53 @@ export class Player extends Schema {
    * @param powerRarity - Rarity of the captured power
    */
   addPower(powerId: string, powerType: string, powerRarity: string): void {
-    // In a full implementation, this would add to a MapSchema of powers
-    // For now, we just update the player's state
+    // Create a new power collection entry
+    const powerCollection = new PowerCollection(powerId, this.id);
+    this.powers.set(powerId, powerCollection);
+    
+    // Update player state
     this.state = "idle";
     this.lastActivity = Date.now();
+    
+    // In a real implementation, rewards would be calculated based on power properties
+    // For now, we give fixed rewards based on rarity
+    switch (powerRarity) {
+      case "Legendary":
+        this.xp += 50;
+        this.coins += 25;
+        break;
+      case "Epic":
+        this.xp += 30;
+        this.coins += 15;
+        break;
+      case "Rare":
+        this.xp += 20;
+        this.coins += 10;
+        break;
+      case "Uncommon":
+        this.xp += 10;
+        this.coins += 5;
+        break;
+      default: // Common
+        this.xp += 5;
+        this.coins += 2;
+        break;
+    }
+    
+    // Check if player has ranked up
+    this.checkRankUp();
+  }
+  
+  /**
+   * Check if player has enough XP to rank up
+   */
+  checkRankUp(): void {
+    const xpRequiredForRankUp = this.rank * 100; // Simple formula: rank * 100 XP needed
+    
+    if (this.xp >= xpRequiredForRankUp && this.rank < 4) {
+      this.rank++;
+      // Notify about rank up would happen here in a full implementation
+    }
   }
 
   /**
