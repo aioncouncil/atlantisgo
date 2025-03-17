@@ -8,6 +8,7 @@
 
 import { Schema, type, MapSchema } from '@colyseus/schema';
 import { Player, Power, Zone } from './GameEntities.js';
+import { Experience, ExperienceInstance } from './ExperienceSchema.js';
 
 /**
  * WorldState contains all synchronized game state
@@ -22,12 +23,19 @@ export class WorldState extends Schema {
   // Zones in the world
   @type({ map: Zone }) zones = new MapSchema<Zone>();
   
+  // Experiences available in the world
+  @type({ map: Experience }) experiences = new MapSchema<Experience>();
+  
+  // Active experience instances
+  @type({ map: ExperienceInstance }) experienceInstances = new MapSchema<ExperienceInstance>();
+  
   // Global properties
   @type("number") worldTime: number = Date.now();
   @type("number") lastUpdateTime: number = Date.now();
   @type("number") playerCount: number = 0;
   @type("number") activePowerCount: number = 0;
   @type("number") activeZoneCount: number = 0;
+  @type("number") activeExperienceCount: number = 0;
   
   // Game settings
   @type("number") visibilityRadius: number = 1000; // meters
@@ -48,6 +56,7 @@ export class WorldState extends Schema {
     this.playerCount = this.players.size;
     this.activePowerCount = this.getActivePowerCount();
     this.activeZoneCount = this.getActiveZoneCount();
+    this.activeExperienceCount = this.experienceInstances.size;
   }
   
   /**
@@ -174,6 +183,104 @@ export class WorldState extends Schema {
       
       if (distance <= radius) {
         result.push(player);
+      }
+    });
+    
+    return result;
+  }
+  
+  /**
+   * Get experiences in radius of position
+   * @param x - X coordinate
+   * @param y - Y coordinate
+   * @param radius - Search radius
+   * @returns Array of experiences within radius
+   */
+  getExperiencesInRadius(x: number, y: number, radius: number): Experience[] {
+    const result: Experience[] = [];
+    
+    this.experiences.forEach(experience => {
+      if (experience.locationType === "Anywhere") {
+        // Always include "Anywhere" experiences when in range of any zone
+        const nearbyZone = this.getZoneAtPosition(x, y);
+        if (nearbyZone) {
+          result.push(experience);
+        }
+      } else if (experience.locationType === "Zone" && experience.zoneId) {
+        // Check if player is in the specified zone
+        const zone = this.zones.get(experience.zoneId);
+        if (zone) {
+          const distance = Math.sqrt(
+            Math.pow(zone.center.x - x, 2) + 
+            Math.pow(zone.center.y - y, 2)
+          );
+          
+          if (distance <= zone.radius) {
+            result.push(experience);
+          }
+        }
+      } else if (experience.locationType === "Coordinates") {
+        // Check if player is near the coordinates
+        const distance = Math.sqrt(
+          Math.pow(experience.coordinates.x - x, 2) + 
+          Math.pow(experience.coordinates.y - y, 2)
+        );
+        
+        if (distance <= experience.radius) {
+          result.push(experience);
+        }
+      }
+    });
+    
+    return result;
+  }
+  
+  /**
+   * Get experience instance by ID
+   * @param instanceId - ID of the experience instance
+   * @returns ExperienceInstance or undefined if not found
+   */
+  getExperienceInstance(instanceId: string): ExperienceInstance | undefined {
+    return this.experienceInstances.get(instanceId);
+  }
+  
+  /**
+   * Get experience by ID
+   * @param experienceId - ID of the experience
+   * @returns Experience or undefined if not found
+   */
+  getExperience(experienceId: string): Experience | undefined {
+    return this.experiences.get(experienceId);
+  }
+  
+  /**
+   * Get active experience instances for a player
+   * @param playerId - ID of the player
+   * @returns Array of experience instances the player is participating in
+   */
+  getPlayerExperienceInstances(playerId: string): ExperienceInstance[] {
+    const result: ExperienceInstance[] = [];
+    
+    this.experienceInstances.forEach(instance => {
+      if (instance.participants.has(playerId)) {
+        result.push(instance);
+      }
+    });
+    
+    return result;
+  }
+  
+  /**
+   * Get all experience instances in a zone
+   * @param zoneId - ID of the zone
+   * @returns Array of experience instances in the zone
+   */
+  getZoneExperienceInstances(zoneId: string): ExperienceInstance[] {
+    const result: ExperienceInstance[] = [];
+    
+    this.experienceInstances.forEach(instance => {
+      if (instance.zoneId === zoneId) {
+        result.push(instance);
       }
     });
     

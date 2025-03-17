@@ -126,15 +126,13 @@ export class SynchronizedCounter extends Schema {
 export class UserMetadata extends Schema {
   @type("string") userId: string;
   @type("string") username: string;
-  @type("number") rank: number = 1;
+  @type("number") rank: number = 0;
   @type("string") avatarUrl: string = "";
   
-  constructor(userId: string, username: string, rank: number = 1, avatarUrl: string = "") {
+  constructor(userId: string, username: string) {
     super();
     this.userId = userId;
     this.username = username;
-    this.rank = rank;
-    this.avatarUrl = avatarUrl;
   }
 }
 
@@ -146,21 +144,20 @@ export class VirtuePoints extends Schema {
   @type("number") courage: number = 0;
   @type("number") temperance: number = 0;
   @type("number") justice: number = 0;
-  @type("number") strength: number = 0;
+  @type("number") total: number = 0;
   
   constructor(
     wisdom: number = 0,
     courage: number = 0,
     temperance: number = 0,
-    justice: number = 0,
-    strength: number = 0
+    justice: number = 0
   ) {
     super();
     this.wisdom = wisdom;
     this.courage = courage;
     this.temperance = temperance;
     this.justice = justice;
-    this.strength = strength;
+    this.total = this.wisdom + this.courage + this.temperance + this.justice;
   }
   
   /**
@@ -169,6 +166,24 @@ export class VirtuePoints extends Schema {
    */
   calculateHappiness(): number {
     // Simple average for now, can be replaced with more complex algorithm
-    return (this.wisdom + this.courage + this.temperance + this.justice + this.strength) / 5;
+    return (this.wisdom + this.courage + this.temperance + this.justice) / 4;
+  }
+
+  addPoints(virtue: string, points: number) {
+    switch(virtue.toLowerCase()) {
+      case 'wisdom':
+        this.wisdom += points;
+        break;
+      case 'justice':
+        this.justice += points;
+        break;
+      case 'courage':
+        this.courage += points;
+        break;
+      case 'temperance':
+        this.temperance += points;
+        break;
+    }
+    this.total = this.wisdom + this.justice + this.courage + this.temperance;
   }
 }

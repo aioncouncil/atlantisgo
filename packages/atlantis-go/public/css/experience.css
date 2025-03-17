@@ -1,0 +1,699 @@
+/**
+ * Experience Engine UI Styles
+ * Apple-style futuristic design
+ */
+
+:root {
+  --experience-bg-primary: rgba(28, 28, 30, 0.95);
+  --experience-bg-secondary: rgba(44, 44, 46, 0.8);
+  --experience-bg-tertiary: rgba(58, 58, 60, 0.7);
+  --experience-bg-light: rgba(174, 174, 178, 0.12);
+  --experience-bg-success: rgba(48, 209, 88, 0.1);
+  --experience-bg-warning: rgba(255, 214, 10, 0.1);
+  --experience-bg-danger: rgba(255, 69, 58, 0.1);
+  --experience-bg-info: rgba(10, 132, 255, 0.1);
+  --experience-accent-primary: rgb(10, 132, 255);
+  --experience-accent-secondary: rgb(191, 90, 242);
+  --experience-accent-success: rgb(48, 209, 88);
+  --experience-accent-warning: rgb(255, 214, 10);
+  --experience-accent-danger: rgb(255, 69, 58);
+  --experience-accent-info: rgb(100, 210, 255);
+  --experience-type-quest: rgb(191, 90, 242);
+  --experience-type-challenge: rgb(255, 159, 10);
+  --experience-type-collaboration: rgb(48, 209, 88);
+  --experience-type-innovation: rgb(100, 210, 255);
+  --experience-type-reflection: rgb(172, 142, 104);
+  --experience-text-primary: rgba(255, 255, 255, 0.95);
+  --experience-text-secondary: rgba(235, 235, 245, 0.6);
+  --experience-text-tertiary: rgba(235, 235, 245, 0.3);
+  --experience-border-radius: 12px;
+  --experience-border-color: rgba(235, 235, 245, 0.1);
+  --experience-border: 1px solid var(--experience-border-color);
+  --experience-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  --experience-font-stack: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --experience-font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --experience-transition: all 0.2s cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+/* Experience Container - Main panel */
+.experience-container {
+  position: fixed;
+  bottom: 80px;
+  right: 20px;
+  width: 400px;
+  max-height: 600px;
+  background: rgba(15, 15, 20, 0.95);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(8px);
+  color: white;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  z-index: 999;
+}
+
+.experience-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.experience-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.experience-container::-webkit-scrollbar-thumb {
+  background: var(--experience-bg-tertiary);
+  border-radius: 3px;
+}
+
+/* Experience Header */
+.experience-header {
+  padding: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.experience-title {
+  margin: 0;
+  font-size: 24px;
+  background: linear-gradient(45deg, #4c6ef5, #15aabf);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.experience-subtitle {
+  margin: 4px 0 0 0;
+  font-size: 14px;
+  opacity: 0.7;
+}
+
+.experience-close-btn {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 20px;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+}
+
+.experience-close-btn:hover {
+  opacity: 1;
+}
+
+/* Experience Card - For browsing available experiences */
+.experience-card {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.experience-card:hover {
+  background: rgba(255, 255, 255, 0.1);
+  transform: translateY(-2px);
+}
+
+.experience-card h3 {
+  margin: 0 0 8px 0;
+  font-size: 18px;
+}
+
+.experience-card p {
+  margin: 0;
+  font-size: 14px;
+  opacity: 0.7;
+}
+
+.experience-card .meta {
+  margin-top: 12px;
+  display: flex;
+  gap: 16px;
+  font-size: 12px;
+  opacity: 0.5;
+}
+
+.experience-card.quest {
+  border-left-color: var(--experience-type-quest);
+}
+
+.experience-card.quest .experience-card-type {
+  color: var(--experience-type-quest);
+}
+
+.experience-card.challenge {
+  border-left-color: var(--experience-type-challenge);
+}
+
+.experience-card.challenge .experience-card-type {
+  color: var(--experience-type-challenge);
+}
+
+.experience-card.collaboration {
+  border-left-color: var(--experience-type-collaboration);
+}
+
+.experience-card.collaboration .experience-card-type {
+  color: var(--experience-type-collaboration);
+}
+
+.experience-card.innovation {
+  border-left-color: var(--experience-type-innovation);
+}
+
+.experience-card.innovation .experience-card-type {
+  color: var(--experience-type-innovation);
+}
+
+.experience-card.reflection {
+  border-left-color: var(--experience-type-reflection);
+}
+
+.experience-card.reflection .experience-card-type {
+  color: var(--experience-type-reflection);
+}
+
+/* Experience Phase UI */
+.experience-phase {
+  padding: 16px;
+  background: var(--experience-bg-light);
+  border-radius: var(--experience-border-radius);
+  margin-bottom: 16px;
+}
+
+.experience-phase-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.experience-phase-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.experience-phase-time {
+  font-size: 14px;
+  color: var(--experience-text-secondary);
+}
+
+.experience-phase-description {
+  font-size: 14px;
+  color: var(--experience-text-secondary);
+  margin-bottom: 12px;
+  line-height: 1.4;
+}
+
+.experience-task-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.experience-task-item {
+  margin-bottom: 8px;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+}
+
+.experience-task-item::before {
+  content: '';
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  margin-right: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+  border: 2px solid var(--experience-accent-primary);
+}
+
+/* Participant List */
+.experience-participants {
+  margin: 16px 0;
+}
+
+.experience-participants-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 12px 0;
+}
+
+.experience-participants-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.experience-participant {
+  display: flex;
+  align-items: center;
+  background: var(--experience-bg-light);
+  border-radius: 24px;
+  padding: 6px 12px 6px 6px;
+  font-size: 14px;
+}
+
+.experience-participant-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 12px;
+  background: var(--experience-accent-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Buttons */
+.experience-btn {
+  background: var(--experience-accent-primary);
+  color: white;
+  border: none;
+  border-radius: 20px;
+  padding: 10px 16px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--experience-transition);
+}
+
+.experience-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.experience-btn:active {
+  transform: translateY(1px);
+}
+
+.experience-btn-secondary {
+  background: var(--experience-bg-secondary);
+  color: var(--experience-text-primary);
+}
+
+.experience-btn-success {
+  background: var(--experience-accent-success);
+}
+
+.experience-btn-danger {
+  background: var(--experience-accent-danger);
+}
+
+.experience-btn-warning {
+  background: var(--experience-accent-warning);
+  color: #000;
+}
+
+.experience-btn-info {
+  background: var(--experience-accent-info);
+}
+
+/* Progress Bar */
+.experience-progress {
+  height: 6px;
+  background: var(--experience-bg-tertiary);
+  border-radius: 3px;
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+
+.experience-progress-bar {
+  height: 100%;
+  background: var(--experience-accent-success);
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}
+
+/* Form Elements */
+.experience-form-group {
+  margin-bottom: 16px;
+}
+
+.experience-label {
+  display: block;
+  font-size: 14px;
+  margin-bottom: 6px;
+  color: var(--experience-text-secondary);
+}
+
+.experience-input {
+  width: 100%;
+  height: 40px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--experience-border-color);
+  border-radius: 8px;
+  color: var(--experience-text-primary);
+  padding: 0 12px;
+  font-size: 16px;
+  font-family: var(--experience-font-stack);
+}
+
+.experience-textarea {
+  width: 100%;
+  min-height: 100px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--experience-border-color);
+  border-radius: 8px;
+  color: var(--experience-text-primary);
+  padding: 12px;
+  font-size: 16px;
+  font-family: var(--experience-font-stack);
+  resize: vertical;
+}
+
+.experience-input:focus,
+.experience-textarea:focus {
+  outline: none;
+  border-color: var(--experience-accent-primary);
+}
+
+/* Reward Section */
+.experience-rewards {
+  background: var(--experience-bg-light);
+  border-radius: var(--experience-border-radius);
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.experience-rewards-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 12px 0;
+}
+
+.experience-rewards-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.experience-reward-item {
+  display: flex;
+  align-items: center;
+  background: var(--experience-bg-secondary);
+  border-radius: var(--experience-border-radius);
+  padding: 10px;
+  min-width: 100px;
+}
+
+.experience-reward-icon {
+  font-size: 24px;
+  margin-right: 12px;
+}
+
+.experience-reward-value {
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.experience-reward-label {
+  font-size: 12px;
+  color: var(--experience-text-tertiary);
+}
+
+/* Experience Filter Bar */
+.experience-filter-bar {
+  padding: 12px;
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.experience-filter-button {
+  background: none;
+  border: none;
+  color: white;
+  padding: 6px 12px;
+  border-radius: 16px;
+  font-size: 14px;
+  cursor: pointer;
+  white-space: nowrap;
+  opacity: 0.7;
+  transition: all 0.2s ease;
+}
+
+.experience-filter-button:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.experience-filter-button.active {
+  background: #4c6ef5;
+  opacity: 1;
+}
+
+/* Badge for notifications */
+.experience-badge {
+  background: var(--experience-accent-primary);
+  color: white;
+  font-size: 12px;
+  font-weight: bold;
+  height: 20px;
+  min-width: 20px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+}
+
+/* Experience Toast Notification */
+.experience-toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: rgba(15, 15, 20, 0.95);
+  border-radius: 8px;
+  padding: 12px;
+  min-width: 300px;
+  max-width: 400px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(8px);
+  color: white;
+  z-index: 1001;
+  animation: slideIn 0.3s ease;
+}
+
+.experience-toast.error {
+  border-left: 4px solid #ff4757;
+}
+
+.experience-toast.success {
+  border-left: 4px solid #2ecc71;
+}
+
+.experience-toast-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.experience-toast-title {
+  margin: 0;
+  font-size: 16px;
+}
+
+.experience-toast-close {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 16px;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+}
+
+.experience-toast-close:hover {
+  opacity: 1;
+}
+
+.experience-toast-message {
+  margin: 0;
+  font-size: 14px;
+  opacity: 0.7;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* Minimized experience indicator */
+.experience-indicator {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 50px;
+  height: 50px;
+  background: linear-gradient(135deg, #4c6ef5, #15aabf);
+  border-radius: 25px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(76, 110, 245, 0.3);
+  transition: all 0.3s ease;
+  z-index: 1000;
+}
+
+.experience-indicator:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(76, 110, 245, 0.4);
+}
+
+.experience-indicator-icon {
+  font-size: 24px;
+  color: white;
+}
+
+.experience-indicator-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  background: #ff4757;
+  color: white;
+  font-size: 12px;
+  font-weight: bold;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+}
+
+/* Zone Raid UI */
+.zone-raid-container {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.zone-raid-map {
+  height: 140px;
+  background: var(--experience-bg-light);
+  border-radius: var(--experience-border-radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.zone-raid-team {
+  background: var(--experience-bg-light);
+  border-radius: var(--experience-border-radius);
+  padding: 12px;
+  text-align: center;
+}
+
+.zone-raid-team-name {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 8px 0;
+}
+
+.zone-raid-team-score {
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.zone-raid-vs {
+  text-align: center;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--experience-text-secondary);
+}
+
+.zone-raid-status {
+  background: var(--experience-accent-warning);
+  color: black;
+  text-align: center;
+  padding: 8px;
+  border-radius: var(--experience-border-radius);
+  font-weight: 600;
+}
+
+.zone-raid-status.active {
+  background: var(--experience-accent-danger);
+  color: white;
+  animation: pulse 2s infinite;
+}
+
+.zone-raid-timer {
+  font-size: 32px;
+  font-weight: 700;
+  text-align: center;
+  font-family: var(--experience-font-display);
+}
+
+.zone-raid-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.zone-raid-action-btn {
+  background: var(--experience-bg-secondary);
+  border: none;
+  border-radius: var(--experience-border-radius);
+  padding: 12px;
+  color: var(--experience-text-primary);
+  cursor: pointer;
+  transition: var(--experience-transition);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.zone-raid-action-btn:hover {
+  background: var(--experience-bg-tertiary);
+  transform: translateY(-2px);
+}
+
+.zone-raid-action-btn:active {
+  transform: translateY(0);
+}
+
+.zone-raid-action-icon {
+  font-size: 24px;
+  margin-bottom: 6px;
+}
+
+.zone-raid-action-label {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+@keyframes pulse {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+  100% {
+    opacity: 1;
+  }
+} 

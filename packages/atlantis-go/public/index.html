@@ -3,400 +3,187 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Atlantis Go - World Map</title>
-  <script src="https://unpkg.com/colyseus.js@0.14.0/dist/colyseus.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/phaser@3.70.0/dist/phaser.min.js"></script>
-  <link rel="stylesheet" href="css/main.css">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+  <title>Atlantis Go</title>
   <style>
     body {
-      font-family: 'Inter', sans-serif;
-      touch-action: manipulation;
-    }
-    /* Additional styles */
-    #status-panel {
-      position: fixed;
-      top: 10px;
-      left: 10px;
-      background-color: rgba(0, 0, 0, 0.7);
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      background: linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb2d);
       color: #fff;
-      padding: 10px;
-      border-radius: 5px;
-      z-index: 1000;
-      width: 200px;
-      font-size: 12px;
-      transition: opacity 0.3s ease;
-      pointer-events: auto;
-    }
-    
-    #ui-toggle {
-      position: fixed;
-      top: 10px;
-      right: 10px;
-      background-color: rgba(0, 0, 0, 0.7);
-      color: #fff;
-      padding: 5px 10px;
-      border-radius: 5px;
-      z-index: 1001;
-      cursor: pointer;
-      font-size: 14px;
-      border: 1px solid #333;
-      pointer-events: auto;
-    }
-    
-    #status-panel h2 {
-      font-size: 14px;
-      margin: 0 0 10px 0;
-    }
-    
-    .virtue-bar {
-      margin-bottom: 5px;
-    }
-    
-    .progress-bar {
-      height: 12px;
-      background-color: #222;
-      border-radius: 3px;
+      height: 100vh;
       overflow: hidden;
-      display: inline-block;
-      width: 60%;
-      margin: 0 5px;
     }
     
-    .progress {
-      height: 100%;
-      transition: width 0.3s ease;
-    }
-    
-    /* Improved touch controls */
-    .controls {
+    #login-container {
       position: fixed;
-      bottom: 20px;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      background: rgba(15, 15, 20, 0.9);
+      padding: 2rem;
+      border-radius: 12px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+      backdrop-filter: blur(8px);
+    }
+    
+    #login-container h1 {
+      margin: 0 0 1.5rem 0;
+      font-size: 2.5rem;
+      background: linear-gradient(45deg, #4c6ef5, #15aabf);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    
+    .form-group {
+      margin-bottom: 16px;
+      text-align: left;
+    }
+    
+    .form-group label {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 14px;
+      opacity: 0.9;
+    }
+    
+    .form-group input {
+      width: 100%;
+      padding: 12px;
+      border-radius: 6px;
+      border: none;
+      background: rgba(255, 255, 255, 0.1);
+      color: white;
+      font-size: 16px;
+      transition: all 0.2s ease;
+      box-sizing: border-box;
+    }
+    
+    .form-group input:focus {
+      outline: none;
+      background: rgba(255, 255, 255, 0.2);
+      box-shadow: 0 0 0 2px rgba(76, 110, 245, 0.5);
+    }
+    
+    .form-group input:invalid {
+      box-shadow: 0 0 0 2px rgba(255, 0, 0, 0.5);
+    }
+    
+    .input-help {
+      display: block;
+      font-size: 12px;
+      margin-top: 4px;
+      opacity: 0.7;
+    }
+    
+    #error-message {
+      position: fixed;
+      top: 20px;
       left: 50%;
       transform: translateX(-50%);
-      display: grid;
-      grid-template-areas:
-        ". north ."
-        "west center east"
-        ". south .";
-      grid-gap: 5px;
-      z-index: 100;
-      pointer-events: auto;
-    }
-    
-    .controls button {
-      width: 60px;
-      height: 60px;
-      border-radius: 50%;
-      font-size: 20px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background-color: rgba(51, 51, 51, 0.7);
-      border: 2px solid rgba(100, 100, 100, 0.5);
+      background: rgba(255, 0, 0, 0.8);
       color: white;
-      padding: 0;
-      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
-      -webkit-tap-highlight-color: transparent;
-      touch-action: manipulation;
+      padding: 10px 20px;
+      border-radius: 5px;
+      z-index: 1000;
+      display: none;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 4px 16px rgba(255, 0, 0, 0.3);
     }
     
-    .controls button:active {
-      background-color: rgba(80, 80, 80, 0.9);
-      transform: scale(0.95);
-    }
-    
-    #btn-north { grid-area: north; }
-    #btn-south { grid-area: south; }
-    #btn-east { grid-area: east; }
-    #btn-west { grid-area: west; }
-    #center-point { 
-      grid-area: center; 
-      width: 20px;
-      height: 20px;
-      background-color: rgba(100, 100, 100, 0.3);
-      border-radius: 50%;
-      margin: auto;
-    }
-    
-    #zoom-controls {
-      position: fixed;
-      bottom: 20px;
-      right: 20px;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      z-index: 100;
-      pointer-events: auto;
-    }
-    
-    #zoom-controls button {
-      width: 50px;
-      height: 50px;
-      border-radius: 50%;
-      font-size: 24px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background-color: rgba(51, 51, 51, 0.7);
-      border: 2px solid rgba(100, 100, 100, 0.5);
+    button {
+      background: #4c6ef5;
       color: white;
-      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
-      -webkit-tap-highlight-color: transparent;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 1.1rem;
+      font-weight: 600;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 12px rgba(76, 110, 245, 0.3);
+      width: 100%;
     }
     
-    #zoom-controls button:active {
-      background-color: rgba(80, 80, 80, 0.9);
-      transform: scale(0.95);
+    button:not(:disabled):hover {
+      background: #5379ff;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(76, 110, 245, 0.4);
     }
     
-    .mobile-ui-layer {
+    button:not(:disabled):active {
+      transform: translateY(0);
+    }
+    
+    button:disabled {
+      background: #2d3b66;
+      cursor: not-allowed;
+      transform: none;
+      opacity: 0.7;
+    }
+    
+    #game-container {
       position: fixed;
       top: 0;
       left: 0;
       width: 100%;
       height: 100%;
-      z-index: 100;
-      pointer-events: none;
+      display: none;
+      background: #000;
+    }
+
+    .loading {
+      position: relative;
+      padding-right: 32px !important;
     }
     
-    /* Power Collection button style */
-    #btn-power-collection {
-      position: fixed;
-      top: 10px;
-      right: 100px;
-      background-color: rgba(0, 122, 255, 0.8);
-      color: #fff;
-      padding: 8px 12px;
-      border-radius: 5px;
-      z-index: 1001;
-      cursor: pointer;
-      font-size: 14px;
-      border: none;
-      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-      pointer-events: auto;
-      display: flex;
-      align-items: center;
-    }
-    
-    #btn-power-collection:active {
-      background-color: rgba(0, 100, 210, 0.9);
-      transform: scale(0.98);
-    }
-    
-    #btn-power-collection svg {
+    .loading::after {
+      content: '';
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
       width: 16px;
       height: 16px;
-      margin-right: 5px;
-      fill: currentColor;
+      border: 2px solid rgba(255, 255, 255, 0.5);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    
+    @keyframes spin {
+      to { transform: translateY(-50%) rotate(360deg); }
     }
   </style>
 </head>
 <body>
-  <!-- Loading Screen -->
-  <div id="loading-screen">
-    <img src="assets/logo.svg" alt="Atlantis Go" class="logo" style="margin-bottom: 20px; max-width: 300px;">
-    <div class="spinner"></div>
-    <div id="loading-text">Connecting to Atlantis...</div>
-    <div id="loading-progress" style="width: 200px; height: 6px; background: rgba(255,255,255,0.1); margin-top: 20px; border-radius: 3px; overflow: hidden;">
-      <div id="progress-bar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #3a86ff, #63a4ff); transition: width 0.3s ease-out;"></div>
+  <div id="error-message"></div>
+  
+  <div id="login-container">
+    <div id="login-card">
+      <div class="login-header">
+        <h1>Atlantis Go</h1>
+        <p>Enter your credentials to join the world</p>
+      </div>
+      <div class="login-form">
+        <div class="form-group">
+          <label for="username">Username</label>
+          <input type="text" id="username" placeholder="Enter your username" minlength="3" maxlength="20" pattern="[a-zA-Z0-9_-]+" required>
+          <small class="input-help">3-20 characters, letters, numbers, - and _</small>
+        </div>
+        <button id="connect-btn">Connect to World</button>
+      </div>
     </div>
   </div>
-
+  
   <div id="game-container"></div>
   
-  <!-- Mobile UI Layer that sits on top of game canvas but allows click-through -->
-  <div class="mobile-ui-layer">
-    <div id="status-panel">
-      <div class="status-header">
-        <img src="assets/logo.svg" alt="Atlantis Go" class="status-logo" style="width: 150px; margin-bottom: 10px;">
-      </div>
-      <div id="connection-status" class="connecting">Connecting...</div>
-      <div id="player-count">Players: 0</div>
-      <div id="power-count">Powers: 0</div>
-      <div id="zone-info">Zone: None</div>
-      <button id="btn-reconnect" style="margin-top: 10px; display: none;">Reconnect</button>
-      
-      <!-- Virtue metrics -->
-      <div id="virtue-metrics">
-        <h3>Virtue Metrics</h3>
-        <div class="virtue-bar">
-          <span>Wisdom:</span>
-          <div class="progress-bar">
-            <div id="wisdom-progress" class="progress" style="width: 0%;"></div>
-          </div>
-          <span id="wisdom-value">0</span>
-        </div>
-        <div class="virtue-bar">
-          <span>Courage:</span>
-          <div class="progress-bar">
-            <div id="courage-progress" class="progress" style="width: 0%;"></div>
-          </div>
-          <span id="courage-value">0</span>
-        </div>
-        <div class="virtue-bar">
-          <span>Temperance:</span>
-          <div class="progress-bar">
-            <div id="temperance-progress" class="progress" style="width: 0%;"></div>
-          </div>
-          <span id="temperance-value">0</span>
-        </div>
-        <div class="virtue-bar">
-          <span>Justice:</span>
-          <div class="progress-bar">
-            <div id="justice-progress" class="progress" style="width: 0%;"></div>
-          </div>
-          <span id="justice-value">0</span>
-        </div>
-      </div>
-    </div>
-    
-    <button id="ui-toggle">Hide UI</button>
-    
-    <!-- Power Collection Button -->
-    <button id="btn-power-collection">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-        <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
-      </svg>
-      Powers
-    </button>
-    
-    <div class="controls">
-      <button id="btn-north">↑</button>
-      <button id="btn-west">←</button>
-      <div id="center-point"></div>
-      <button id="btn-east">→</button>
-      <button id="btn-south">↓</button>
-    </div>
-    
-    <div id="debug"></div>
-
-    <!-- Power details modal -->
-    <div id="power-details">
-      <h3 id="power-name"></h3>
-      <p id="power-description"></p>
-      <div id="power-stats"></div>
-      <div id="power-challenge"></div>
-      <div class="power-button-container">
-        <button id="btn-capture-power" class="power-button">Capture</button>
-        <button id="btn-close-power" class="power-button">Close</button>
-      </div>
-    </div>
-
-    <!-- Zoom controls -->
-    <div id="zoom-controls">
-      <button id="btn-zoom-in">+</button>
-      <button id="btn-zoom-out">-</button>
-    </div>
-  </div>
-
-  <!-- Load modular JavaScript -->
-  <script type="module" src="js/app.js"></script>
+  <!-- Load Colyseus client -->
+  <script src="https://unpkg.com/colyseus.js@^0.15.0/dist/colyseus.js"></script>
   
-  <!-- UI Toggle Script -->
-  <script>
-    document.getElementById('ui-toggle').addEventListener('click', function() {
-      const panel = document.getElementById('status-panel');
-      const controls = document.querySelector('.controls');
-      const zoomControls = document.getElementById('zoom-controls');
-      
-      if (panel.style.display === 'none') {
-        panel.style.display = 'block';
-        controls.style.display = 'grid';
-        zoomControls.style.display = 'flex';
-        this.textContent = 'Hide UI';
-      } else {
-        panel.style.display = 'none';
-        controls.style.display = 'none';
-        zoomControls.style.display = 'none';
-        this.textContent = 'Show UI';
-      }
-    });
-
-    // Enable long press for movement buttons
-    const setupLongPress = (buttonId, moveFunction) => {
-      let interval;
-      let isHolding = false;
-      const button = document.getElementById(buttonId);
-      
-      if (!button) return;
-      
-      const startMove = () => {
-        isHolding = true;
-        moveFunction();
-        interval = setInterval(() => {
-          if (isHolding) moveFunction();
-        }, 100);
-      };
-      
-      const stopMove = () => {
-        isHolding = false;
-        clearInterval(interval);
-      };
-      
-      button.addEventListener('mousedown', startMove);
-      button.addEventListener('touchstart', startMove, { passive: true });
-      
-      document.addEventListener('mouseup', stopMove);
-      document.addEventListener('touchend', stopMove);
-      
-      // Prevent context menu on long press (mobile)
-      button.addEventListener('contextmenu', (e) => e.preventDefault());
-    };
-
-    // Loading screen handling
-    window.addEventListener('load', function() {
-      // Simulate loading progress
-      let progress = 0;
-      const progressBar = document.getElementById('progress-bar');
-      const loadingText = document.getElementById('loading-text');
-      const loadingScreen = document.getElementById('loading-screen');
-      
-      const loadingMessages = [
-        "Connecting to Atlantis...",
-        "Loading game assets...",
-        "Preparing world map...",
-        "Generating powers...",
-        "Creating zones...",
-        "Initializing virtue system..."
-      ];
-      
-      const interval = setInterval(function() {
-        progress += Math.random() * 15;
-        if (progress >= 100) {
-          progress = 100;
-          clearInterval(interval);
-          setTimeout(function() {
-            loadingScreen.style.opacity = 0;
-            setTimeout(function() {
-              loadingScreen.style.display = 'none';
-            }, 500);
-          }, 500);
-        }
-        progressBar.style.width = progress + '%';
-        
-        // Randomly change loading message
-        if (Math.random() < 0.2) {
-          const randomIndex = Math.floor(Math.random() * loadingMessages.length);
-          loadingText.textContent = loadingMessages[randomIndex];
-        }
-      }, 200);
-    });
-  </script>
-  
-  <!-- Import the Power Collection component -->
-  <script type="module">
-    import { PowerCollection } from './components/PowerCollection.js';
-    
-    document.addEventListener('DOMContentLoaded', () => {
-      // The PowerCollection component is now initialized from the app.js file
-      // We don't need to handle it here anymore
-      
-      // For backward compatibility, we'll keep the window methods
-      window.initPowerCollection = (container, room) => {
-        console.warn('PowerCollection is now initialized from app.js');
-      };
-    });
-  </script>
+  <!-- Load game scripts -->
+  <script src="components/WorldManager.js" type="module"></script>
+  <script src="setup.js" type="module"></script>
 </body>
 </html> 

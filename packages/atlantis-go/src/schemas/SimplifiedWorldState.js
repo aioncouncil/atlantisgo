@@ -4,7 +4,7 @@
  * A simplified schema for world state, avoiding complex nested objects
  */
 
-import { Schema, MapSchema, defineTypes } from '@colyseus/schema';
+import { Schema, MapSchema, ArraySchema, defineTypes } from '@colyseus/schema';
 
 /**
  * SimplePosition class
@@ -146,6 +146,176 @@ defineTypes(SimpleZone, {
 });
 
 /**
+ * SimpleExperiencePhase class
+ */
+export class SimpleExperiencePhase extends Schema {
+  constructor(name, description, duration) {
+    super();
+    this.name = name;
+    this.description = description;
+    this.duration = duration;
+    this.tasks = new ArraySchema();
+  }
+  
+  addTask(task) {
+    this.tasks.push(task);
+  }
+}
+
+defineTypes(SimpleExperiencePhase, {
+  name: "string",
+  description: "string",
+  duration: "number",
+  tasks: ["string"]
+});
+
+/**
+ * SimpleExperience class
+ */
+export class SimpleExperience extends Schema {
+  constructor(id, name, type) {
+    super();
+    this.id = id;
+    this.name = name;
+    this.type = type;
+    this.description = "";
+    this.difficulty = 1;
+    this.estimatedDuration = 15;
+    this.maximumDuration = 30;
+    this.minimumRank = 1;
+    this.minPlayers = 1;
+    this.maxPlayers = 4;
+    this.locationType = "Anywhere";
+    this.zoneId = "";
+    this.x = 0;
+    this.y = 0;
+    this.radius = 0;
+    this.flow = new ArraySchema();
+    this.phases = new ArraySchema();
+    this.requiredPowers = new ArraySchema();
+    this.xpReward = 10;
+    this.coinsReward = 5;
+    this.powerRewards = new ArraySchema();
+  }
+}
+
+defineTypes(SimpleExperience, {
+  id: "string",
+  name: "string",
+  type: "string",
+  description: "string",
+  difficulty: "number",
+  estimatedDuration: "number",
+  maximumDuration: "number",
+  minimumRank: "number",
+  minPlayers: "number",
+  maxPlayers: "number",
+  locationType: "string",
+  zoneId: "string",
+  x: "number",
+  y: "number",
+  radius: "number",
+  flow: ["string"],
+  phases: [SimpleExperiencePhase],
+  requiredPowers: ["string"],
+  xpReward: "number",
+  coinsReward: "number",
+  powerRewards: ["string"]
+});
+
+/**
+ * SimpleExperienceParticipant class
+ */
+export class SimpleExperienceParticipant extends Schema {
+  constructor(userId, role = "Participant") {
+    super();
+    this.userId = userId;
+    this.role = role;
+    this.status = "Active";
+    this.joinTime = Date.now();
+    this.completeTime = 0;
+  }
+  
+  complete() {
+    this.status = "Completed";
+    this.completeTime = Date.now();
+  }
+  
+  fail() {
+    this.status = "Failed";
+    this.completeTime = Date.now();
+  }
+}
+
+defineTypes(SimpleExperienceParticipant, {
+  userId: "string",
+  role: "string",
+  status: "string",
+  joinTime: "number",
+  completeTime: "number"
+});
+
+/**
+ * SimpleExperienceActivity class
+ */
+export class SimpleExperienceActivity extends Schema {
+  constructor(id, userId, content) {
+    super();
+    this.id = id;
+    this.userId = userId;
+    this.content = content;
+    this.timestamp = Date.now();
+    this.verified = false;
+  }
+  
+  verify() {
+    this.verified = true;
+  }
+}
+
+defineTypes(SimpleExperienceActivity, {
+  id: "string",
+  userId: "string",
+  content: "string",
+  timestamp: "number",
+  verified: "boolean"
+});
+
+/**
+ * SimpleExperienceInstance class
+ */
+export class SimpleExperienceInstance extends Schema {
+  constructor(id, experienceId) {
+    super();
+    this.id = id;
+    this.experienceId = experienceId;
+    this.status = "Scheduled";
+    this.participants = new MapSchema();
+    this.currentPhase = 0;
+    this.startTime = 0;
+    this.lastUpdateTime = Date.now();
+    this.estimatedCompletionTime = 0;
+    this.activities = new MapSchema();
+    this.completionTime = 0;
+    this.zoneId = "";
+  }
+}
+
+defineTypes(SimpleExperienceInstance, {
+  id: "string",
+  experienceId: "string",
+  status: "string",
+  participants: { map: SimpleExperienceParticipant },
+  currentPhase: "number",
+  startTime: "number",
+  lastUpdateTime: "number",
+  estimatedCompletionTime: "number",
+  activities: { map: SimpleExperienceActivity },
+  completionTime: "number",
+  zoneId: "string"
+});
+
+/**
  * SimplifiedWorldState class
  */
 export class SimplifiedWorldState extends Schema {
@@ -156,22 +326,32 @@ export class SimplifiedWorldState extends Schema {
     this.players = new MapSchema();
     this.powers = new MapSchema();
     this.zones = new MapSchema();
+    this.experiences = new MapSchema();
+    this.experienceInstances = new MapSchema();
     
     // World properties
     this.name = "Atlantis World";
     this.visibilityRadius = 1000; // meters
     this.interactionRadius = 50; // meters
     this.maxPlayers = 100;
-    this.lastUpdate = Date.now();
-    this.ticks = 0;
+    this.worldTime = Date.now();
+    this.lastUpdateTime = Date.now();
+    this.playerCount = 0;
+    this.activePowerCount = 0;
+    this.activeZoneCount = 0;
+    this.activeExperienceCount = 0;
   }
   
   /**
-   * Update tick counter
+   * Update world time
    */
   tick() {
-    this.ticks++;
-    this.lastUpdate = Date.now();
+    this.worldTime = Date.now();
+    this.lastUpdateTime = Date.now();
+    this.playerCount = Object.keys(this.players).length;
+    this.activePowerCount = this.countActivePowers();
+    this.activeZoneCount = this.countActiveZones();
+    this.activeExperienceCount = Object.keys(this.experienceInstances).length;
   }
 }
 
@@ -179,10 +359,16 @@ defineTypes(SimplifiedWorldState, {
   players: { map: SimplePlayer },
   powers: { map: SimplePower },
   zones: { map: SimpleZone },
+  experiences: { map: SimpleExperience },
+  experienceInstances: { map: SimpleExperienceInstance },
   name: "string",
   visibilityRadius: "number",
   interactionRadius: "number",
   maxPlayers: "number",
-  lastUpdate: "number",
-  ticks: "number"
+  worldTime: "number",
+  lastUpdateTime: "number",
+  playerCount: "number",
+  activePowerCount: "number",
+  activeZoneCount: "number",
+  activeExperienceCount: "number"
 }); 

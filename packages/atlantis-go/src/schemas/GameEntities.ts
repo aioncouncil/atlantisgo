@@ -16,8 +16,13 @@ import { nanoid } from 'nanoid';
  */
 export class Player extends Schema {
   @type("string") id: string;
+  @type("string") username: string;
+  @type(Position) position = new Position(0, 0);
+  @type("number") level: number = 1;
+  @type("number") experience: number = 0;
+  @type("string") avatarUrl: string = "";
+  @type("number") lastActive: number = Date.now();
   @type(UserMetadata) metadata: UserMetadata;
-  @type(Position) position: Position = new Position();
   @type(VirtuePoints) virtues: VirtuePoints = new VirtuePoints();
   @type("string") currentZoneId: string = "";
   @type("boolean") isActive: boolean = true;
@@ -28,9 +33,10 @@ export class Player extends Schema {
   @type("number") xp: number = 0;
   @type("number") coins: number = 0;
 
-  constructor(id: string, metadata: UserMetadata) {
+  constructor(id: string, username: string, metadata: UserMetadata) {
     super();
     this.id = id;
+    this.username = username;
     this.metadata = metadata;
   }
 
@@ -133,36 +139,23 @@ export class Player extends Schema {
 export class Power extends Schema {
   @type("string") id: string;
   @type("string") name: string;
-  @type("string") description: string = "";
-  @type("string") type: string; // maps to Art category
-  @type("string") rarity: string; // Common, Uncommon, Rare, Epic, Legendary
-  @type("string") matrixQuadrant: string; // SoulOut, SoulIn, BodyOut, BodyIn
-  @type(Position) position: Position = new Position();
+  @type("string") type: string;
+  @type("string") rarity: string;
+  @type(Position) position = new Position(0, 0);
   @type("number") spawnTime: number = Date.now();
-  @type("number") despawnTime: number = 0; // 0 means no despawn scheduled
+  @type("number") despawnTime: number = Date.now() + 3600000; // 1 hour default
   @type("boolean") isActive: boolean = true;
   @type("number") challengeDifficulty: number = 1; // 1-100 difficulty to capture
   
   // Store the full challenge details separately (not synced directly)
   captureChallenge: any;
 
-  constructor(
-    id: string, 
-    name: string, 
-    type: string, 
-    rarity: string, 
-    matrixQuadrant: string,
-    position: Position,
-    captureChallenge: number = 1
-  ) {
+  constructor(id: string, name: string, type: string, rarity: string) {
     super();
     this.id = id;
     this.name = name;
     this.type = type;
     this.rarity = rarity;
-    this.matrixQuadrant = matrixQuadrant;
-    this.position = position;
-    this.challengeDifficulty = captureChallenge;
   }
 
   /**
@@ -208,12 +201,11 @@ export class Power extends Schema {
 export class Zone extends Schema {
   @type("string") id: string;
   @type("string") name: string;
-  @type("string") description: string = "";
-  @type("string") type: string; // e.g., "residential", "commercial", "education"
-  @type("number") level: number = 1;
-  @type(Position) center: Position;
-  @type("number") radius: number; // in meters
-  @type("string") ownerId: string = ""; // User or team that owns this zone
+  @type("string") type: string;
+  @type(Position) position = new Position(0, 0);
+  @type("number") radius: number = 100;
+  @type("string") controlledBy: string = "";
+  @type("number") lastCaptured: number = 0;
   @type("number") creationTime: number = Date.now();
   @type("number") lastActivity: number = Date.now();
   @type(["string"]) currentPlayerIds = new ArraySchema<string>();
@@ -221,19 +213,11 @@ export class Zone extends Schema {
   @type("boolean") isActive: boolean = true;
   attributes: Record<string, any> = {}; // Custom attributes for zone features
 
-  constructor(
-    id: string,
-    name: string,
-    type: string,
-    center: Position,
-    radius: number
-  ) {
+  constructor(id: string, name: string, type: string) {
     super();
     this.id = id;
     this.name = name;
     this.type = type;
-    this.center = center;
-    this.radius = radius;
   }
 
   /**
@@ -270,7 +254,7 @@ export class Zone extends Schema {
    * @returns True if position is in zone
    */
   containsPosition(position: Position): boolean {
-    return this.center.distanceTo(position) <= this.radius;
+    return this.position.distanceTo(position) <= this.radius;
   }
 
   /**
@@ -280,7 +264,6 @@ export class Zone extends Schema {
    */
   updateInfo(name: string, description: string): void {
     this.name = name;
-    this.description = description;
     this.lastActivity = Date.now();
   }
 
@@ -289,7 +272,7 @@ export class Zone extends Schema {
    * @param ownerId - ID of new owner (user or team)
    */
   setOwner(ownerId: string): void {
-    this.ownerId = ownerId;
+    this.controlledBy = ownerId;
     this.lastActivity = Date.now();
   }
 }

@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Atlantis Go</title>
+    <script src="https://unpkg.com/colyseus.js@^0.15.0/dist/colyseus.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f0f0f0;
+        }
+        #loginContainer {
+            max-width: 400px;
+            margin: 50px auto;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        input {
+            width: 100%;
+            padding: 8px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            width: 100%;
+            padding: 10px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+        }
+        #gameContainer {
+            display: none;
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        #errorContainer {
+            display: none;
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px;
+            background: #ff4444;
+            color: white;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+    <div id="loginContainer">
+        <h2>Welcome to Atlantis Go</h2>
+        <input type="text" id="usernameInput" placeholder="Enter your username" pattern="[a-zA-Z0-9_-]{3,20}" title="3-20 characters, letters, numbers, - and _">
+        <button id="connectButton" disabled>Connect</button>
+    </div>
+
+    <div id="gameContainer">
+        <h3>Game World</h3>
+        <div id="playerInfo"></div>
+        <div id="worldInfo"></div>
+    </div>
+
+    <div id="errorContainer"></div>
+
+    <script>
+        let client;
+        let room;
+        let reconnectAttempts = 0;
+        const MAX_RECONNECT_ATTEMPTS = 3;
+        const RECONNECT_DELAY = 2000;
+
+        // DOM Elements
+        const usernameInput = document.getElementById('usernameInput');
+        const connectButton = document.getElementById('connectButton');
+        const loginContainer = document.getElementById('loginContainer');
+        const gameContainer = document.getElementById('gameContainer');
+        const playerInfo = document.getElementById('playerInfo');
+        const worldInfo = document.getElementById('worldInfo');
+        const errorContainer = document.getElementById('errorContainer');
+
+        // Input validation
+        usernameInput.addEventListener('input', () => {
+            const isValid = usernameInput.value.length >= 3 && 
+                          usernameInput.value.length <= 20 && 
+                          /^[a-zA-Z0-9_-]+$/.test(usernameInput.value);
+            connectButton.disabled = !isValid;
+        });
+
+        // Connect button handler
+        connectButton.addEventListener('click', async () => {
+            try {
+                connectButton.disabled = true;
+                connectButton.textContent = 'Connecting...';
+                
+                await connectToServer();
+            } catch (error) {
+                showError('Failed to connect: ' + error.message);
+                connectButton.disabled = false;
+                connectButton.textContent = 'Connect';
+            }
+        });
+
+        // Connection handling
+        async function connectToServer() {
+            client = new Colyseus.Client('ws://localhost:3000');
+            
+            try {
+                room = await client.joinOrCreate("world", {
+                    username: usernameInput.value
+                });
+
+                // Connection successful
+                loginContainer.style.display = 'none';
+                gameContainer.style.display = 'block';
+                
+                setupRoomHandlers();
+                
+            } catch (error) {
+                throw new Error('Connection failed: ' + error.message);
+            }
+        }
+
+        function setupRoomHandlers() {
+            room.onStateChange((state) => {
+                updateWorldInfo(state);
+            });
+
+            room.onError((code, message) => {
+                showError(`Error: ${message}`);
+            });
+
+            room.onLeave((code) => {
+                showError('Disconnected from server');
+                if (code >= 1000) {
+                    attemptReconnect();
+                }
+            });
+        }
+
+        function updateWorldInfo(state) {
+            const playerCount = Object.keys(state.players).length;
+            const powerCount = Object.keys(state.powers).length;
+            
+            worldInfo.innerHTML = `
+                <p>Connected Players: ${playerCount}</p>
+                <p>Active Powers: ${powerCount}</p>
+                <p>World Time: ${new Date(state.worldTime).toLocaleTimeString()}</p>
+            `;
+        }
+
+        async function attemptReconnect() {
+            if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+                showError('Maximum reconnection attempts reached');
+                return;
+            }
+
+            reconnectAttempts++;
+            showError(`Attempting to reconnect (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`);
+
+            setTimeout(async () => {
+                try {
+                    await connectToServer();
+                    reconnectAttempts = 0;
+                    showError('Reconnected successfully!', 'success');
+                } catch (error) {
+                    if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                        attemptReconnect();
+                    }
+                }
+            }, RECONNECT_DELAY);
+        }
+
+        function showError(message, type = 'error') {
+            errorContainer.style.display = 'block';
+            errorContainer.style.background = type === 'error' ? '#ff4444' : '#4CAF50';
+            errorContainer.textContent = message;
+
+            setTimeout(() => {
+                errorContainer.style.display = 'none';
+            }, 5000);
+        }
+
+        // Handle visibility change
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible' && room?.connection?.isOpen === false) {
+                attemptReconnect();
+            }
+        });
+    </script>
+</body>
+</html> 

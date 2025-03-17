@@ -11,13 +11,15 @@
 
 import { Room, Client, Delayed, ServerError } from '@colyseus/core';
 import { MapSchema } from '@colyseus/schema';
-import { SimplifiedWorldState, SimplePlayer, SimplePower, SimpleZone } from '../schemas/SimplifiedWorldState.js';
-import { Player, Power as GameEntityPower, Zone } from '../schemas/GameEntities.js';
+import { SimplifiedWorldState, SimplePlayer, SimplePower, SimpleZone } from '../schemas/BaseSchema.js';
+import { Player, Zone } from '../schemas/GameEntities.js';
 import { Position, UserMetadata, VirtuePoints } from '../schemas/index.js';
-import { Power } from '../schemas/PowerSchema.js';
-import PowerService from '../services/PowerService.js';
+import { PowerCollection, Power } from '../schemas/PowerSchema.js';
+import { PowerService } from '../services/PowerService.js';
+import { ExperienceService, type Experience } from '../services/ExperienceService.js';
 import { nanoid } from 'nanoid';
 import { SimplePosition } from '../types.js';
+import { ExperienceInstance } from '../schemas/ExperienceSchema.js';
 
 // Define RoomOptions type
 interface RoomOptions {
@@ -52,12 +54,18 @@ interface MovementMessage {
 
 interface PowerInteractionMessage {
   powerId: string;
-  response?: any;
-  challengeResponse?: any;
+  type: string;
+  data?: any;
 }
 
-interface ZoneInteractionMessage {
-  zoneId: string;
+interface ExperienceInteractionMessage {
+  experienceId: string;
+  type: string;
+  data?: any;
+}
+
+interface PlayerStatusMessage {
+  state?: string;
 }
 
 // Configuration constants
@@ -91,13 +99,40 @@ const CONFIG = {
   BATCH_UPDATES: true,
   BROADCAST_THROTTLE_MS: 100, // Throttle broadcasts
   ENTITY_CULLING_DISTANCE: 2000, // Only send entities within this distance
-  OPTIMIZE_NETWORK: true // Enable network optimizations
+  OPTIMIZE_NETWORK: true, // Enable network optimizations
+  EXPERIENCE_SPAWN_INTERVAL: 5 * 60 * 1000, // 5 minutes
+  MAX_EXPERIENCES_PER_AREA: 5,
+  EXPERIENCE_MAX_COUNT: 30,
+  EXPERIENCE_DENSITY: 0.0002, // Experiences per square meter
+  EXPERIENCE_LIFETIME: 24 * 3600000, // 24 hours in ms
 };
+
+interface GeneratedPower {
+  id: string;
+  name: string;
+  type: string;
+  rarity: string;
+  position: Position;
+}
 
 /**
  * WorldRoom: The primary multiplayer room that manages the game world
  */
 export class WorldRoom extends Room<SimplifiedWorldState> {
+  private powerService: PowerService;
+  private experienceService: ExperienceService;
+  private tickInterval!: Delayed;
+  private cleanupInterval!: Delayed;
+  private lastTickTime: number = Date.now();
+  private readonly TICK_RATE: number = 1000 / 20; // 20 ticks per second
+  private readonly CLEANUP_INTERVAL: number = 60000; // 1 minute
+
+  constructor() {
+    super();
+    this.powerService = new PowerService();
+    this.experienceService = new ExperienceService();
+  }
+
   // Track rate limits for clients
   private movementRateLimits: Map<string, { count: number, lastReset: number }> = new Map();
   private actionRateLimits: Map<string, { count: number, lastReset: number }> = new Map();
@@ -113,450 +148,20 @@ export class WorldRoom extends Room<SimplifiedWorldState> {
   // Last broadcast time
   private lastBroadcastTime: number = 0;
   
-  /**
-   * Spawn powers across the game world
-   */
-  private spawnPowers() {
-    // Check if we've reached the max power count
-    if (this.state.powers.size >= CONFIG.POWER_MAX_COUNT) {
-      return;
-    }
-    
-    // Calculate number of powers to spawn based on density and world size
-    const worldArea = CONFIG.WORLD_SIZE.WIDTH * CONFIG.WORLD_SIZE.HEIGHT;
-    const targetPowerCount = Math.floor(worldArea * CONFIG.POWER_DENSITY);
-    const powersToSpawn = Math.min(
-      CONFIG.MAX_POWERS_PER_AREA,
-      targetPowerCount - this.state.powers.size
-    );
-    
-    if (powersToSpawn <= 0) {
-      return;
-    }
-    
-    console.log(`Spawning ${powersToSpawn} powers...`);
-    
-    // Create a Position object
-    const centerPosition = new Position(
-      CONFIG.WORLD_SIZE.WIDTH / 2,
-      CONFIG.WORLD_SIZE.HEIGHT / 2
-    );
-    
-    // Generate powers using our service - use batch operation for better performance
-    const powers = PowerService.generatePowersForArea(
-      centerPosition,
-      Math.max(CONFIG.WORLD_SIZE.WIDTH, CONFIG.WORLD_SIZE.HEIGHT) / 2,
-      powersToSpawn
-    );
-    
-    console.log(`Generated ${powers.length} powers`);
-    
-    // Improved batch adding of powers with spatial distribution
-    const batchSize = 10; // Process powers in batches to avoid UI freezing
-    const processBatch = (startIndex: number) => {
-      const endIndex = Math.min(startIndex + batchSize, powers.length);
-      
-      for (let i = startIndex; i < endIndex; i++) {
-        const powerData = powers[i];
-        
-        // Create a simplified power
-        const power = new SimplePower(
-          powerData._id,
-          powerData.name,
-          powerData.type,
-          powerData.rarity
-        );
-        
-        // Distribute powers more widely across the map
-        const angle = Math.random() * Math.PI * 2;
-        const distance = Math.random() * CONFIG.WORLD_SIZE.WIDTH / 3;
-        
-        power.x = Math.cos(angle) * distance;
-        power.y = Math.sin(angle) * distance;
-        
-        // Add to state
-        this.state.powers.set(power.id, power);
-      }
-      
-      // Process next batch if there are more powers
-      if (endIndex < powers.length) {
-        setTimeout(() => processBatch(endIndex), 50); // Small delay between batches
-      }
-    };
-    
-    // Start processing the first batch
-    processBatch(0);
-  }
-  
-  /**
-   * Despawn a power from the world
-   */
-  private despawnPower(powerId: string) {
-    const power = this.state.powers.get(powerId);
-    if (!power) return;
-    
-    console.log(`Despawning power ${powerId}`);
-    this.state.powers.delete(powerId);
-  }
-  
-  /**
-   * Handle a power capture attempt
-   * @param client Client attempting capture
-   * @param message Capture message
-   */
-  private handlePowerCapture(client: Client, message: PowerInteractionMessage) {
-    try {
-      console.log(`[handlePowerCapture] Processing capture attempt from client ${client.sessionId} for power ${message.powerId}`);
-      
-      // Get player
-      const player = this.state.players.get(client.sessionId);
-      if (!player) {
-        console.log(`[handlePowerCapture] Player not found for client ${client.sessionId}`);
-        client.send("powerCaptureResult", {
-          success: false,
-          message: "Player not found",
-          powerId: message.powerId
-        });
-        return;
-      }
-      
-      console.log(`[handlePowerCapture] Processing capture for player ${player.username} (${client.sessionId})`);
-      
-      // Get power
-      const power = this.state.powers.get(message.powerId);
-      if (!power) {
-        console.log(`[handlePowerCapture] Power not found: ${message.powerId}`);
-        client.send("powerCaptureResult", {
-          success: false,
-          message: "Power not found",
-          powerId: message.powerId
-        });
-        return;
-      }
-      
-      if (!power.isActive) {
-        console.log(`[handlePowerCapture] Power already captured: ${message.powerId}`);
-        client.send("powerCaptureResult", {
-          success: false,
-          message: "Power has already been captured",
-          powerId: message.powerId
-        });
-        return;
-      }
-      
-      // Check if player is close enough to interact
-      const distance = Math.sqrt(Math.pow(player.x - power.x, 2) + Math.pow(player.y - power.y, 2));
-      const maxDistance = CONFIG.INTERACTION_RADIUS;
-      
-      console.log(`[handlePowerCapture] Player position: (${player.x}, ${player.y}), Power position: (${power.x}, ${power.y})`);
-      console.log(`[handlePowerCapture] Distance to power: ${distance}m (max: ${maxDistance}m)`);
-      
-      if (distance > maxDistance) {
-        console.log(`[handlePowerCapture] Too far from power: ${distance}m (max: ${maxDistance}m)`);
-        client.send("powerCaptureResult", {
-          success: false,
-          message: "Too far from power",
-          powerId: message.powerId,
-          distance: distance,
-          maxDistance: maxDistance
-        });
-        return;
-      }
-      
-      // Process capture - add power to player's collection
-      console.log(`[handlePowerCapture] Capturing power: ${power.id} (${power.name})`);
-      
-      // Make sure player.powers exists
-      if (!player.powers) {
-        console.log(`[handlePowerCapture] Creating new powers collection for player`);
-        player.powers = new MapSchema();
-      }
-      
-      // Add the power to the player's collection
-      player.powers.set(power.id, power.id);
-      console.log(`[handlePowerCapture] Added power ${power.id} to player's collection. Player now has ${player.powers.size} powers`);
-      
-      // Award XP
-      const xpReward = 10; // Default XP reward
-      player.xp += xpReward;
-      console.log(`[handlePowerCapture] Awarded ${xpReward} XP, new total: ${player.xp}`);
-      
-      // Check rank up based on XP
-      this.checkPlayerRankUp(player);
-      
-      // Deactivate power
-      power.isActive = false;
-      console.log(`[handlePowerCapture] Deactivated power ${power.id}`);
-      
-      // Schedule power to be removed after delay
-      setTimeout(() => {
-        this.despawnPower(power.id);
-      }, 5000);
-      
-      // Send capture result
-      console.log(`[handlePowerCapture] Sending success result to client ${client.sessionId}`);
-      client.send("powerCaptureResult", {
-        success: true,
-        message: "Power captured successfully!",
-        powerId: power.id,
-        powerName: power.name,
-        powerType: power.type,
-        powerRarity: power.rarity,
-        playerXp: player.xp,
-        playerRank: player.rank,
-        powerCount: player.powers.size
-      });
-      
-      // Broadcast capture event to other clients
-      this.broadcast("powerCaptured", {
-        playerId: player.id,
-        playerName: player.username,
-        powerId: power.id,
-        powerName: power.name,
-        powerRarity: power.rarity
-      }, { except: client });
-      
-    } catch (error) {
-      console.error(`[handlePowerCapture] Error processing capture:`, error);
-      client.send("powerCaptureResult", {
-        success: false,
-        message: "Server error processing capture",
-        powerId: message.powerId
-      });
-    }
-  }
-  
-  /**
-   * Check if player should rank up based on XP
-   */
-  private checkPlayerRankUp(player: SimplePlayer) {
-    const xpThresholds = [0, 100, 250, 500, 1000, 2000, 4000, 8000, 16000, 32000];
-    
-    for (let rank = xpThresholds.length; rank > 0; rank--) {
-      if (player.xp >= xpThresholds[rank - 1]) {
-        if (player.rank < rank) {
-          player.rank = rank;
-        }
-        break;
-      }
-    }
-  }
-  
-  /**
-   * Handle zone entry
-   */
-  private handleZoneEntry(client: Client, message: any) {
-    const player = this.state.players.get(client.sessionId);
-    if (!player) return;
-    
-    // Validate message
-    if (!message.zoneId) return;
-    
-    const zone = this.state.zones.get(message.zoneId);
-    if (!zone) {
-      client.send('zone:notFound', { zoneId: message.zoneId });
-      return;
-    }
-    
-    // Check if player is inside zone bounds
-    if (!zone.containsPosition({ x: player.x, y: player.y })) {
-      client.send('zone:notInRange', { zoneId: zone.id });
-      return;
-    }
-    
-    // Update player's current zone
-    if (player.currentZoneId) {
-      // Remove from previous zone
-      const oldZone = this.state.zones.get(player.currentZoneId);
-      if (oldZone) oldZone.removePlayer(player.id);
-    }
-    
-    // Add to new zone
-    zone.addPlayer(player.id);
-    player.setZone(zone.id);
-    
-    // Send zone details to client
-    client.send('zone:entered', {
-      zoneId: zone.id,
-      zoneName: zone.name,
-      zoneType: zone.type,
-      zoneAttributes: zone.attributes
-    });
-  }
-  
-  /**
-   * Handle zone exit
-   */
-  private handleZoneExit(client: Client, message: any) {
-    const player = this.state.players.get(client.sessionId);
-    if (!player || !player.currentZoneId) return;
-    
-    // Validate message
-    if (!message.zoneId || message.zoneId !== player.currentZoneId) return;
-    
-    const zone = this.state.zones.get(player.currentZoneId);
-    if (!zone) return;
-    
-    // Remove player from zone
-    zone.removePlayer(player.id);
-    player.setZone("");
-    
-    // Notify client
-    client.send('zone:exited', {
-      zoneId: zone.id,
-      zoneName: zone.name
-    });
-  }
-  
-  /**
-   * Handle player status updates
-   */
-  private handlePlayerStatus(client: Client, message: any) {
-    const player = this.state.players.get(client.sessionId);
-    if (!player) return;
-    
-    // Update player status
-    if (message.state) {
-      player.setState(message.state);
-    }
-    
-    // Update activity timestamp
-    player.lastActivity = Date.now();
-    player.isActive = true;
-  }
-  
-  // Utility methods for power generation
-  
-  private generatePowerName(): string {
-    const prefixes = [
-      "Cosmic", "Ancient", "Divine", "Mystic", "Eternal", 
-      "Primal", "Astral", "Elemental", "Virtuous", "Harmonic"
-    ];
-    
-    const types = [
-      "Wisdom", "Courage", "Temperance", "Justice", "Harmony", 
-      "Balance", "Insight", "Vision", "Presence", "Connection"
-    ];
-    
-    return `${prefixes[Math.floor(Math.random() * prefixes.length)]} ${types[Math.floor(Math.random() * types.length)]}`;
-  }
-  
-  private getRandomPowerType(): string {
-    const types = ["Wisdom", "Courage", "Temperance", "Justice"];
-    return types[Math.floor(Math.random() * types.length)];
-  }
-  
-  private getRandomRarity(): string {
-    const rarities = ["Common", "Uncommon", "Rare", "Epic", "Legendary"];
-    const weights = [50, 30, 15, 4, 1]; // Percentage chance
-    
-    const roll = Math.random() * 100;
-    let cumulativeWeight = 0;
-    
-    for (let i = 0; i < rarities.length; i++) {
-      cumulativeWeight += weights[i];
-      if (roll < cumulativeWeight) {
-        return rarities[i];
-      }
-    }
-    
-    return "Common"; // Default fallback
-  }
-  
-  private getRandomMatrixQuadrant(): string {
-    const quadrants = ["Soul-Out", "Soul-In", "Body-Out", "Body-In"];
-    return quadrants[Math.floor(Math.random() * quadrants.length)];
-  }
-  
-  private generateCaptureChallenge(rarity: string): any {
-    // This would typically generate a philosophical or virtue-related challenge
-    // based on the rarity of the power
-    
-    const challenges = {
-      "Common": {
-        type: "reflection",
-        question: "What small act of kindness did you perform today?",
-        difficulty: 1
-      },
-      "Uncommon": {
-        type: "choice",
-        scenario: "You find a wallet with $100. What do you do?",
-        options: ["Keep it", "Turn it in", "Look for the owner"],
-        correctIndex: 2,
-        difficulty: 2
-      },
-      "Rare": {
-        type: "virtue",
-        virtue: "Courage",
-        task: "Describe a time when you stood up for what's right, despite fear",
-        difficulty: 3
-      },
-      "Epic": {
-        type: "philosophical",
-        question: "How do you balance personal freedom with responsibility to others?",
-        minLength: 100,
-        difficulty: 4
-      },
-      "Legendary": {
-        type: "wisdom",
-        paradox: "The more you give, the more you receive",
-        task: "Explain this paradox through a personal experience",
-        minLength: 200,
-        difficulty: 5
-      }
-    };
-    
-    return challenges[rarity as keyof typeof challenges] || challenges["Common"];
-  }
-  
-  private evaluateCaptureChallenge(power: GameEntityPower, response: any): number {
-    // This would contain logic to evaluate the quality of the user's response
-    // to the philosophical challenge
-    
-    // For now, implement a simple evaluation based on response length and rarity
-    let baseSuccessRate = 0;
-    
-    switch (power.rarity) {
-      case "Common": baseSuccessRate = 0.9; break;
-      case "Uncommon": baseSuccessRate = 0.7; break;
-      case "Rare": baseSuccessRate = 0.5; break;
-      case "Epic": baseSuccessRate = 0.3; break;
-      case "Legendary": baseSuccessRate = 0.1; break;
-      default: baseSuccessRate = 0.5;
-    }
-    
-    // Very simple response quality evaluation based on type
-    let responseQuality = 0;
-    
-    const challenge = power.captureChallenge;
-    if (!challenge) return baseSuccessRate;
-    
-    if (challenge.type === "reflection" || challenge.type === "virtue" || 
-        challenge.type === "philosophical" || challenge.type === "wisdom") {
-      // For text responses, check length and keywords
-      const responseText = response.text || "";
-      responseQuality = Math.min(1, responseText.length / (challenge.minLength || 50));
-      
-      // In a real implementation, you would use NLP to evaluate the quality
-      // of philosophical responses
-    } else if (challenge.type === "choice") {
-      // For multiple choice, check correctness
-      responseQuality = response.choiceIndex === challenge.correctIndex ? 1 : 0;
-    }
-    
-    // Final success rate combines base rate and response quality
-    return Math.min(1, baseSuccessRate + (responseQuality * 0.3));
-  }
+  // Add these properties to the WorldRoom class
+  private experienceSpawnTask: NodeJS.Timeout | null = null;
+  private activeExperienceInstances: Map<string, Delayed> = new Map();
   
   /**
    * Called when room is initialized
    */
-  async onCreate(options: RoomOptions) {
+  async onCreate(options: RoomOptions = {}) {
     console.log("WorldRoom created with options:", options);
     
     try {
       // Initialize state
       this.setState(new SimplifiedWorldState());
+      this.state.name = options.name || "Main World";
       
       // Set max clients
       this.maxClients = CONFIG.MAX_PLAYERS;
@@ -564,11 +169,28 @@ export class WorldRoom extends Room<SimplifiedWorldState> {
       // Create initial zones - spread across creation
       setTimeout(() => this.createInitialZones(), 100);
       
+      // Spawn initial powers
+      this.spawnPowers();
+      
+      // Spawn initial experiences
+      this.spawnExperiences();
+      
       // Register message handlers
       this.registerMessageHandlers();
       
       // Start scheduled tasks
       this.startScheduledTasks();
+      
+      // Set up periodic world updates
+      this.tickInterval = this.clock.setInterval(() => {
+        this.state.updateTick();
+        this.lastTickTime = Date.now();
+      }, this.TICK_RATE);
+
+      // Set up periodic cleanup
+      this.cleanupInterval = this.clock.setInterval(() => {
+        this.cleanup();
+      }, this.CLEANUP_INTERVAL);
       
       console.log(`WorldRoom initialized successfully`);
     } catch (error) {
@@ -641,22 +263,25 @@ export class WorldRoom extends Room<SimplifiedWorldState> {
    */
   private registerMessageHandlers() {
     // Player movement
-    this.onMessage("move", (client, message) => {
+    this.onMessage("move", (client, message: MovementMessage) => {
       this.handlePlayerMovement(client, message);
     });
     
     // Power interactions
-    this.onMessage("power:interact", (client, message) => {
+    this.onMessage("power:interact", (client, message: PowerInteractionMessage) => {
       this.handlePowerInteraction(client, message);
     });
     
     // Power capture attempt
-    this.onMessage("power:capture", (client, message) => {
-      this.handlePowerCapture(client, message);
+    this.onMessage("power:capture", (client, message: PowerInteractionMessage) => {
+      const power = this.state.powers.get(message.powerId);
+      if (power) {
+        this.handlePowerCapture(client, power);
+      }
     });
     
     // Request power details
-    this.onMessage("power:details", (client, message) => {
+    this.onMessage("power:details", (client, message: any) => {
       // Get the power
       const power = this.state.powers.get(message.powerId);
       if (!power) {
@@ -683,32 +308,53 @@ export class WorldRoom extends Room<SimplifiedWorldState> {
     });
     
     // Ping handler for latency measurement
-    this.onMessage("ping", (client, message) => {
+    this.onMessage("ping", (client, message: any) => {
       // Simply echo back the time sent by the client
       client.send("pong", { time: message.time });
     });
     
     // Handle zone entry requests
-    this.onMessage("zone:enter", (client, message) => {
+    this.onMessage("zone:enter", (client, message: any) => {
       this.handleZoneEntry(client, message);
     });
     
     // Handle zone exit requests
-    this.onMessage("zone:exit", (client, message) => {
+    this.onMessage("zone:exit", (client, message: any) => {
       this.handleZoneExit(client, message);
     });
     
     // Handle player status updates
-    this.onMessage("player:status", (client, message) => {
+    this.onMessage("player:status", (client, message: PlayerStatusMessage) => {
       this.handlePlayerStatus(client, message);
     });
     
     // Test spawning powers (development only)
     if (process.env.NODE_ENV === 'development') {
-      this.onMessage("debug:spawnTestPowers", (client, message) => {
-        this.handleSpawnTestPowers(client, message);
+      this.onMessage("debug:spawnTestPowers", (client) => {
+        this.handleSpawnTestPowers();
       });
     }
+    
+    // Experience handlers
+    this.onMessage("experienceJoin", (client, message: ExperienceInteractionMessage) => {
+      this.checkRateLimit(client.sessionId, 'action') && 
+        this.handleExperienceJoin(client, message.experienceId);
+    });
+    
+    this.onMessage("experiencePhaseComplete", (client, message: ExperienceInteractionMessage) => {
+      if (message.data?.submission) {
+        this.checkRateLimit(client.sessionId, 'action') && 
+          this.handleExperiencePhaseComplete(client, {
+            experienceId: message.experienceId,
+            submission: message.data.submission
+          });
+      }
+    });
+    
+    this.onMessage("experienceLeave", (client, message: ExperienceInteractionMessage) => {
+      this.checkRateLimit(client.sessionId, 'action') && 
+        this.handleExperienceLeave(client, message.experienceId);
+    });
   }
   
   /**
@@ -750,8 +396,17 @@ export class WorldRoom extends Room<SimplifiedWorldState> {
       }
       
       // Update state tick
-      this.state.tick();
+      this.state.updateTick();
     }, CONFIG.WORLD_UPDATE_INTERVAL);
+    
+    // Spawn new experiences periodically
+    this.experienceSpawnTask = setInterval(() => {
+      try {
+        this.spawnExperiences();
+      } catch (error) {
+        console.error("Error in experience spawn task:", error);
+      }
+    }, CONFIG.EXPERIENCE_SPAWN_INTERVAL);
   }
   
   /**
@@ -765,55 +420,66 @@ export class WorldRoom extends Room<SimplifiedWorldState> {
     this.state.powers.forEach((power, key) => {
       // Check if power has been active for too long
       if (currentTime - power.spawnedAt > maxAge) {
-        this.despawnPower(power.id);
+        this.state.powers.delete(key);
       }
     });
+    
+    // Update world time and tick
+    this.state.worldTime = Date.now();
+    this.state.updateTick();
   }
   
   /**
    * When a client joins the room
    */
-  onJoin(client: Client, options: any) {
+  async onJoin(client: Client, options: RoomOptions) {
     console.log(`${client.sessionId} joined the world!`, options);
     
-    // Create player instance
-    const userId = options.userId || `user_${nanoid(8)}`;
-    const username = options.username || `Player ${Math.floor(Math.random() * 1000)}`;
+    // Get or create player
+    let player = this.state.players.get(client.sessionId);
     
-    // Create a simplified player
-    const player = new SimplePlayer(userId, username);
-    
-    // Set initial position
-    if (options.position) {
-      player.x = options.position.x;
-      player.y = options.position.y;
-    } else {
-      // Random position if none provided
-      player.x = (Math.random() * 100) - 50;  // -50 to +50
-      player.y = (Math.random() * 100) - 50;
+    if (!player) {
+      // Create new player
+      player = new SimplePlayer(client.sessionId, options.name || `Player_${client.sessionId.slice(0, 8)}`);
+      
+      // Set initial position
+      const randomX = (Math.random() - 0.5) * CONFIG.WORLD_SIZE.WIDTH;
+      const randomY = (Math.random() - 0.5) * CONFIG.WORLD_SIZE.HEIGHT;
+      player.x = randomX;
+      player.y = randomY;
+      
+      // Set metadata
+      player.metadata = new MapSchema<string>();
+      player.metadata.set('joinedAt', Date.now().toString());
+      player.metadata.set('lastActivity', Date.now().toString());
+      
+      // Initialize rate limiters
+      this.movementRateLimits.set(client.sessionId, {
+        count: 0,
+        lastReset: Date.now()
+      });
+      
+      this.actionRateLimits.set(client.sessionId, {
+        count: 0,
+        lastReset: Date.now()
+      });
+      
+      // Add to state
+      this.state.players.set(client.sessionId, player);
+      
+      // Broadcast player joined
+      this.broadcast("playerJoined", {
+        id: player.id,
+        username: player.username,
+        position: { x: player.x, y: player.y }
+      });
     }
     
-    // Ensure metadata is null to avoid schema mismatch
-    player.metadata = null;
+    // Send current state to the client
+    client.send("worldState", this.state);
     
-    // Add player to state
-    this.state.players.set(client.sessionId, player);
-    
-    // Initialize rate limiters for this client
-    this.movementRateLimits.set(client.sessionId, {
-      count: 0,
-      lastReset: Date.now()
-    });
-    
-    this.actionRateLimits.set(client.sessionId, {
-      count: 0,
-      lastReset: Date.now()
-    });
-    
-    console.log(`Player ${client.sessionId} joined with position: (${player.x}, ${player.y})`);
-    
-    // Send initial state to client
-    this.sendVisibleWorldToClient(client);
+    // Start inactivity check
+    this.startInactivityCheck(client.sessionId);
   }
   
   /**
@@ -929,17 +595,16 @@ export class WorldRoom extends Room<SimplifiedWorldState> {
   /**
    * Calculate distance between two points
    */
-  private calculateDistance(point1: SimplePosition, point2: SimplePosition): number {
-    return Math.sqrt(
-      Math.pow(point1.x - point2.x, 2) + 
-      Math.pow(point1.y - point2.y, 2)
-    );
+  private calculateDistance(pos1: SimplePosition, pos2: SimplePosition): number {
+    const dx = pos2.x - pos1.x;
+    const dy = pos2.y - pos1.y;
+    return Math.sqrt(dx * dx + dy * dy);
   }
   
   /**
    * Handle player movement with improved efficiency
    */
-  private handlePlayerMovement(client: Client, message: any) {
+  private handlePlayerMovement(client: Client, message: MovementMessage & { state?: string }) {
     // Rate limit check
     if (!this.checkRateLimit(client.sessionId, 'movement')) {
       return;
@@ -984,47 +649,54 @@ export class WorldRoom extends Room<SimplifiedWorldState> {
    * When a client leaves the room
    */
   async onLeave(client: Client, consented: boolean) {
-    const player = this.state.players.get(client.sessionId);
+    console.log(`${client.sessionId} disconnected. Waiting for reconnection...`);
     
     try {
-      if (!consented) {
-        // Unexpected disconnect - wait for reconnection
-        console.log(`${client.sessionId} disconnected. Waiting for reconnection...`);
-        await this.allowReconnection(client, 30);
-        console.log(`${client.sessionId} reconnected!`);
+      // Allow reconnection for 30 seconds
+      await this.allowReconnection(client, 30);
+      
+      // Get player
+      const player = this.state.players.get(client.sessionId);
+      if (player) {
+        // Update player status
+        player.metadata.set('lastActivity', Date.now().toString());
+        player.metadata.set('status', 'disconnected');
         
-        // Reset activity timestamp
-        if (player) {
-          player.lastActivity = Date.now();
-          player.isActive = true;
-        }
-        
-        return;
+        // Broadcast player left
+        this.broadcast("playerLeft", {
+          id: player.id,
+          username: player.username
+        });
       }
-    } catch (e) {
-      // Reconnection failed or timeout expired
-      console.log(`${client.sessionId} couldn't reconnect, removing from world`);
-    }
-    
-    // Remove player from world
-    if (player) {
-      // Remove from current zone if any
-      if (player.currentZoneId) {
-        const zone = this.state.zones.get(player.currentZoneId);
-        if (zone) {
-          zone.removePlayer(player.id);
+    } catch (error) {
+      console.error(`Error in onLeave for client ${client.sessionId}:`, error);
+      
+      // If reconnection failed, clean up the player
+      const player = this.state.players.get(client.sessionId);
+      if (player) {
+        // Remove from current zone if any
+        if (player.currentZoneId) {
+          const zone = this.state.zones.get(player.currentZoneId);
+          if (zone) {
+            zone.removePlayer(player.id);
+          }
         }
+        
+        // Remove player from state
+        this.state.players.delete(client.sessionId);
+        
+        // Broadcast player left
+        this.broadcast("playerLeft", {
+          id: player.id,
+          username: player.username,
+          reason: "reconnection_failed"
+        });
       }
       
-      // Remove player from state
-      this.state.players.delete(client.sessionId);
+      // Clean up rate limiters
+      this.movementRateLimits.delete(client.sessionId);
+      this.actionRateLimits.delete(client.sessionId);
     }
-    
-    // Clean up rate limiters
-    this.movementRateLimits.delete(client.sessionId);
-    this.actionRateLimits.delete(client.sessionId);
-    
-    console.log(`${client.sessionId} left the world`);
   }
   
   /**
@@ -1037,6 +709,18 @@ export class WorldRoom extends Room<SimplifiedWorldState> {
     if (this.powerSpawnTask) clearInterval(this.powerSpawnTask);
     if (this.playerInactivityTask) clearInterval(this.playerInactivityTask);
     if (this.worldStateUpdateTask) clearInterval(this.worldStateUpdateTask);
+    
+    // Clear experience spawn task
+    if (this.experienceSpawnTask) {
+      clearInterval(this.experienceSpawnTask);
+      this.experienceSpawnTask = null;
+    }
+    
+    // Clear active experience timeouts
+    this.activeExperienceInstances.forEach(timeout => {
+      timeout.clear();
+    });
+    this.activeExperienceInstances.clear();
     
     console.log('All tasks cleared');
   }
@@ -1091,7 +775,7 @@ export class WorldRoom extends Room<SimplifiedWorldState> {
    * @param client Client initiating the power interaction
    * @param message Power interaction message
    */
-  private handlePowerInteraction(client: Client, message: any) {
+  private handlePowerInteraction(client: Client, message: PowerInteractionMessage) {
     try {
       // Verbose logging for debugging
       console.log(`[handlePowerInteraction] Client ${client.sessionId} is interacting with power:`, JSON.stringify(message));
@@ -1179,209 +863,371 @@ export class WorldRoom extends Room<SimplifiedWorldState> {
       // Check if player is close enough to interact
       const distance = Math.sqrt(Math.pow(player.x - power.x, 2) + Math.pow(player.y - power.y, 2));
       console.log(`[handlePowerInteraction] Distance to power: ${distance}m (max: ${CONFIG.INTERACTION_RADIUS}m)`);
-      console.log(`[handlePowerInteraction] Player position: (${player.x}, ${player.y}), Power position: (${power.x}, ${power.y})`);
       
-      if (distance > CONFIG.INTERACTION_RADIUS) {
-        console.log(`[handlePowerInteraction] Player too far from power: ${distance}m > ${CONFIG.INTERACTION_RADIUS}m`);
-        client.send('power:tooFar', { 
-          powerId: power.id,
-          distance,
-          maxDistance: CONFIG.INTERACTION_RADIUS,
-          playerPosition: { x: player.x, y: player.y },
-          powerPosition: { x: power.x, y: power.y },
-          message: 'You are too far away from this power',
-          status: 'error',
-          code: 'TOO_FAR'
-        });
-        return;
-      }
-      
-      // Send power details to client
-      console.log(`[handlePowerInteraction] Sending power details to client ${client.sessionId}`);
-      try {
-        const details = {
-          id: power.id,
-          name: power.name || "Unknown Power",
-          description: power.description || "No description available",
-          type: power.type || "Unknown",
-          rarity: power.rarity || "Common",
-          matrixQuadrant: power.matrixQuadrant || "Unknown",
-          captureChallenge: power.captureChallenge || {
-            type: "reflection",
-            question: "What virtue does this power represent to you?"
-          },
-          status: 'success',
-          message: 'Power details retrieved successfully',
-          distance: Math.round(distance * 10) / 10, // Round to 1 decimal place
-          playerPosition: { x: player.x, y: player.y },
-          powerPosition: { x: power.x, y: power.y }
+      // Handle power interaction
+      this.handlePowerInteractionLogic(client, power);
+    } catch (error) {
+      console.error('Error in handlePowerInteraction:', error);
+    }
+  }
+  
+  private async spawnPowers() {
+    try {
+      const center = new Position(0, 0);
+      const powers = PowerService.generatePowersForArea(center, 1000, 10);
+      powers.forEach((power: GeneratedPower) => {
+        const simplePower = new SimplePower(
+          power.id,
+          power.name,
+          power.type,
+          power.rarity
+        );
+        if (power.position) {
+          simplePower.x = power.position.x;
+          simplePower.y = power.position.y;
+        }
+        this.state.powers.set(power.id, simplePower);
+      });
+    } catch (error) {
+      this.handleError(error, 'spawnPowers');
+    }
+  }
+
+  private handleError(error: unknown, context: string) {
+    console.error(`Error in ${context}:`, error instanceof Error ? error.message : String(error));
+  }
+
+  private async handleExperienceInteraction(client: Client, experienceData: { id: string }) {
+    try {
+      const experience = await this.experienceService.getExperienceById(experienceData.id);
+      if (!experience) return;
+
+      const player = this.state.players.get(client.sessionId);
+      if (!player) return;
+
+      const instance = ExperienceService.createExperienceInstance(
+        experienceData.id,
+        player.currentZoneId || null
+      );
+
+      // Update state and broadcast
+      this.broadcast('experience:started', {
+        playerId: client.sessionId,
+        experienceId: experienceData.id,
+        instanceId: instance.id
+      });
+    } catch (error) {
+      this.handleError(error, 'handleExperienceInteraction');
+    }
+  }
+
+  private async spawnExperiences() {
+    try {
+      const center = new Position(0, 0);
+      const experiences = ExperienceService.generateExperiencesForArea(center, 1000, 5);
+      experiences.forEach(experience => {
+        // Ensure experience has all required fields before storing
+        const validExperience = {
+          id: experience.id,
+          name: experience.name,
+          description: experience.description,
+          type: experience.type || 'Quest', // Ensure type is always set
+          minPlayers: experience.minPlayers || 1,
+          maxPlayers: experience.maxPlayers || 4,
+          phases: experience.phases || [],
+          estimatedDuration: experience.estimatedDuration || 30,
+          maximumDuration: experience.maximumDuration || 60,
+          xpReward: experience.xpReward || 100,
+          coinsReward: experience.coinsReward || 50,
+          wisdomReward: experience.wisdomReward || 10,
+          courageReward: experience.courageReward || 10,
+          temperanceReward: experience.temperanceReward || 10,
+          justiceReward: experience.justiceReward || 10,
+          strengthReward: experience.strengthReward || 10,
+          spawnTime: Date.now()
         };
-        
-        console.log(`[handlePowerInteraction] Power details to send:`, JSON.stringify(details));
-        client.send('power:details', details);
-        
-        // Update player last activity and state
-        player.lastActivity = Date.now();
-        player.setState('interacting');
-      } catch (detailsError) {
-        console.error(`[handlePowerInteraction] Error sending power details:`, detailsError);
-        client.send('power:error', { 
-          message: 'Error processing power details',
-          error: detailsError.message,
-          status: 'error',
-          code: 'DETAILS_ERROR'
-        });
+        this.state.experiences.set(experience.id, JSON.stringify(validExperience));
+      });
+    } catch (error) {
+      this.handleError(error, 'spawnExperiences');
+    }
+  }
+
+  private cleanup() {
+    try {
+      // Clean up inactive players
+      this.state.players.forEach((player, sessionId) => {
+        if (!player.isActive && Date.now() - player.lastActivity > CONFIG.PLAYER_INACTIVE_TIMEOUT) {
+          this.state.players.delete(sessionId);
+        }
+      });
+
+      // Clean up expired powers
+      this.state.powers.forEach((power, powerId) => {
+        if (!power.isActive || Date.now() - power.spawnedAt > CONFIG.POWER_LIFETIME) {
+          this.state.powers.delete(powerId);
+        }
+      });
+
+      // Clean up expired experiences
+      this.state.experiences.forEach((experienceStr, experienceId) => {
+        const experience = JSON.parse(experienceStr);
+        if (Date.now() - experience.spawnTime > CONFIG.EXPERIENCE_LIFETIME) {
+          this.state.experiences.delete(experienceId);
+        }
+      });
+    } catch (error) {
+      this.handleError(error, 'cleanup');
+    }
+  }
+
+  private handlePowerCapture(client: Client, power: SimplePower) {
+    try {
+      const player = this.state.players.get(client.sessionId);
+      if (!player) return;
+
+      // Remove power from state
+      this.state.powers.delete(power.id);
+
+      // Update player's power collection
+      if (!player.powers) {
+        player.powers = new MapSchema<string>();
+      }
+      player.powers.set(power.id, power.id);
+
+      // Broadcast power capture
+      this.broadcast('power:captured', {
+        playerId: client.sessionId,
+        powerId: power.id
+      });
+    } catch (error) {
+      this.handleError(error, 'handlePowerCapture');
+    }
+  }
+
+  private handleZoneEntry(client: Client, zoneId: string) {
+    try {
+      const player = this.state.players.get(client.sessionId);
+      const zone = this.state.zones.get(zoneId);
+      if (!player || !zone) return;
+
+      zone.addPlayer(client.sessionId);
+      player.setZone(zoneId);
+
+      this.broadcast('zone:entered', {
+        playerId: client.sessionId,
+        zoneId: zoneId
+      });
+    } catch (error) {
+      this.handleError(error, 'handleZoneEntry');
+    }
+  }
+
+  private handleZoneExit(client: Client, zoneId: string) {
+    try {
+      const player = this.state.players.get(client.sessionId);
+      const zone = this.state.zones.get(zoneId);
+      if (!player || !zone) return;
+
+      zone.removePlayer(client.sessionId);
+      player.setZone('');
+
+      this.broadcast('zone:exited', {
+        playerId: client.sessionId,
+        zoneId: zoneId
+      });
+    } catch (error) {
+      this.handleError(error, 'handleZoneExit');
+    }
+  }
+
+  private handlePlayerStatus(client: Client, message: PlayerStatusMessage) {
+    try {
+      const player = this.state.players.get(client.sessionId);
+      if (!player) return;
+
+      if (message.state) {
+        player.setState(message.state);
       }
     } catch (error) {
-      console.error(`[handlePowerInteraction] Unexpected error:`, error);
-      try {
-        client.send('power:error', { 
-          message: 'Server error processing power interaction',
-          error: error.message,
-          status: 'error',
-          code: 'SERVER_ERROR'
-        });
-      } catch (sendError) {
-        console.error(`[handlePowerInteraction] Failed to send error to client:`, sendError);
+      this.handleError(error, 'handlePlayerStatus');
+    }
+  }
+
+  private handleSpawnTestPowers() {
+    try {
+      this.spawnPowers();
+    } catch (error) {
+      this.handleError(error, 'handleSpawnTestPowers');
+    }
+  }
+
+  private handleExperienceJoin(client: Client, experienceId: string) {
+    try {
+      const player = this.state.players.get(client.sessionId);
+      if (!player) {
+        console.warn(`Player not found for client ${client.sessionId}`);
+        return;
       }
+
+      const experienceStr = this.state.experiences.get(experienceId);
+      if (!experienceStr) {
+        console.warn(`Experience ${experienceId} not found`);
+        return;
+      }
+
+      let experience;
+      try {
+        experience = JSON.parse(experienceStr);
+        // Validate required fields
+        if (!experience || !experience.type || !experience.id) {
+          console.error(`Invalid experience data for ${experienceId}:`, experience);
+          return;
+        }
+      } catch (e) {
+        console.error(`Failed to parse experience data for ${experienceId}:`, e);
+        return;
+      }
+
+      const instance = ExperienceService.createExperienceInstance(experienceId, player.currentZoneId || null);
+      instance.addParticipant(client.sessionId);
+
+      this.broadcast('experience:joined', {
+        playerId: client.sessionId,
+        experienceId: experienceId,
+        instanceId: instance.id,
+        experience: {
+          id: experience.id,
+          name: experience.name,
+          type: experience.type,
+          description: experience.description
+        }
+      });
+    } catch (error) {
+      this.handleError(error, 'handleExperienceJoin');
     }
   }
-  
-  /**
-   * Handle the admin request to spawn test powers
-   * @param client - Client requesting power spawn
-   * @param message - Spawn message with options
-   */
-  private handleSpawnTestPowers(client: Client, message: any) {
-    console.log(`[handleSpawnTestPowers] Received request:`, message);
-    
-    // Get player
-    const player = this.state.players.get(client.sessionId);
-    if (!player) {
-      console.log(`[handleSpawnTestPowers] Player not found for client ${client.sessionId}`);
-      return;
+
+  private handleExperiencePhaseComplete(client: Client, data: { experienceId: string, submission: string }) {
+    try {
+      const player = this.state.players.get(client.sessionId);
+      if (!player) return;
+
+      const experienceStr = this.state.experiences.get(data.experienceId);
+      if (!experienceStr) return;
+
+      const experience = JSON.parse(experienceStr);
+      // Handle phase completion logic here
+
+      this.broadcast('experience:phaseComplete', {
+        playerId: client.sessionId,
+        experienceId: data.experienceId,
+        submission: data.submission
+      });
+    } catch (error) {
+      this.handleError(error, 'handleExperiencePhaseComplete');
     }
-    
-    // Log the request
-    console.log(`[handleSpawnTestPowers] Admin request from ${player.username} (${client.sessionId})`);
-    
-    // Default count
-    const count = message.count || 3;
-    console.log(`[handleSpawnTestPowers] Spawning ${count} powers`);
-    
-    // Generate powers near the player if specified
-    let centerPosition = new Position();
-    if (message.nearPlayer) {
-      centerPosition.x = player.x;
-      centerPosition.y = player.y;
-      console.log(`[handleSpawnTestPowers] Using player position: (${centerPosition.x}, ${centerPosition.y})`);
-    } else {
-      centerPosition.x = 0;
-      centerPosition.y = 0;
-      console.log(`[handleSpawnTestPowers] Using default position: (0, 0)`);
-    }
-    
-    // Generate powers
-    const radius = message.radius || 100; // 100 meter radius
-    console.log(`[handleSpawnTestPowers] Requesting ${count} powers within ${radius}m radius`);
-    
-    const powers = PowerService.generatePowersForArea(centerPosition, radius, count);
-    console.log(`[handleSpawnTestPowers] Generated ${powers.length} powers`);
-    
-    // Add powers to game world
-    for (const powerData of powers) {
-      // Create a simplified power that works with our schema
-      const power = new SimplePower(
-        powerData._id,
-        powerData.name,
-        powerData.type,
-        powerData.rarity
-      );
-      
-      // Position the power - randomly place within radius of requested position
-      const angle = Math.random() * Math.PI * 2;
-      const distance = Math.random() * radius * 0.8; // 80% of radius for better clustering
-      power.x = centerPosition.x + Math.cos(angle) * distance;
-      power.y = centerPosition.y + Math.sin(angle) * distance;
-      
-      // Make sure the power is active
-      power.isActive = true;
-      power.spawnedAt = Date.now();
-      
-      // Add to state
-      this.state.powers.set(power.id, power);
-      console.log(`[handleSpawnTestPowers] Spawned power: ${power.name} (${power.id}) at (${power.x}, ${power.y})`);
-    }
-    
-    // Update total count
-    console.log(`[handleSpawnTestPowers] Total powers in world: ${this.state.powers.size}`);
-    
-    // Notify the client
-    client.send("admin:powersSpawned", {
-      count: powers.length,
-      position: {
-        x: centerPosition.x,
-        y: centerPosition.y
-      },
-      radius: radius
-    });
   }
-  
+
+  private handleExperienceLeave(client: Client, experienceId: string) {
+    try {
+      const player = this.state.players.get(client.sessionId);
+      if (!player) return;
+
+      const experienceStr = this.state.experiences.get(experienceId);
+      if (!experienceStr) return;
+
+      this.broadcast('experience:left', {
+        playerId: client.sessionId,
+        experienceId: experienceId
+      });
+    } catch (error) {
+      this.handleError(error, 'handleExperienceLeave');
+    }
+  }
+
   /**
-   * Check if a player has entered or exited a zone
-   * @param client Client to notify
-   * @param player Player to check
+   * Check if player is inside any zone
    */
   private checkZoneEntry(client: Client, player: SimplePlayer) {
-    // Find zone at current position
-    let currentZone = null;
-    
-    this.state.zones.forEach((zone) => {
-      const distance = Math.sqrt(
-        Math.pow(zone.x - player.x, 2) + 
-        Math.pow(zone.y - player.y, 2)
+    this.state.zones.forEach((zone, zoneId) => {
+      const distance = this.calculateDistance(
+        { x: player.x, y: player.y },
+        { x: zone.x, y: zone.y }
       );
       
-      // Check if player is inside zone
-      if (distance <= zone.radius) {
-        // If multiple zones overlap, prioritize the smaller one
-        if (!currentZone || zone.radius < currentZone.radius) {
-          currentZone = zone;
-        }
+      if (distance <= zone.radius && player.currentZoneId !== zoneId) {
+        this.handleZoneEntry(client, zoneId);
+      } else if (distance > zone.radius && player.currentZoneId === zoneId) {
+        this.handleZoneExit(client, zoneId);
       }
     });
-    
-    // Process zone changes
-    const previousZoneId = player.currentZoneId;
-    
-    if (currentZone) {
-      // Player entered a zone
-      const zoneId = currentZone.id;
-      
-      // Update player's current zone
-      player.setZone(zoneId);
-      
-      // Only notify if the zone changed
-      if (previousZoneId !== zoneId) {
-        client.send('zone:entered', {
-          zoneId: zoneId,
-          zoneName: currentZone.name,
-          zoneType: currentZone.type
-        });
-      }
-    } else if (previousZoneId) {
-      // Player exited a zone
-      const previousZone = this.state.zones.get(previousZoneId);
-      
-      // Clear player's current zone
-      player.setZone("");
-      
-      if (previousZone) {
-        client.send('zone:exited', {
-          zoneId: previousZoneId,
-          zoneName: previousZone.name
-        });
-      }
+  }
+
+  /**
+   * Handle power interaction logic
+   */
+  private handlePowerInteractionLogic(client: Client, power: SimplePower) {
+    const player = this.state.players.get(client.sessionId);
+    if (!player) return;
+
+    const distance = this.calculateDistance(
+      { x: player.x, y: player.y },
+      { x: power.x, y: power.y }
+    );
+
+    if (distance > CONFIG.INTERACTION_RADIUS) {
+      client.send('power:tooFar', {
+        powerId: power.id,
+        distance: Math.round(distance),
+        maxDistance: CONFIG.INTERACTION_RADIUS
+      });
+      return;
     }
+
+    // Send interaction details to client
+    client.send('power:interaction', {
+      powerId: power.id,
+      name: power.name,
+      type: power.type,
+      rarity: power.rarity
+    });
+  }
+
+  /**
+   * Update world state
+   */
+  private updateWorldState() {
+    this.state.updateTick();
+    this.state.worldTime = Date.now();
+  }
+
+  /**
+   * Start inactivity check for a player
+   */
+  private startInactivityCheck(sessionId: string) {
+    // Clear any existing check
+    if (this.playerInactivityTask) {
+      clearTimeout(this.playerInactivityTask);
+    }
+    
+    // Set up new check
+    this.playerInactivityTask = setTimeout(() => {
+      const player = this.state.players.get(sessionId);
+      if (player) {
+        const lastActivity = parseInt(player.metadata.get('lastActivity') || '0');
+        const now = Date.now();
+        
+        if (now - lastActivity > CONFIG.PLAYER_INACTIVE_TIMEOUT) {
+          // Player is inactive, remove them
+          this.state.players.delete(sessionId);
+          this.broadcast("playerLeft", {
+            id: sessionId,
+            username: player.username,
+            reason: "inactive"
+          });
+        }
+      }
+    }, CONFIG.PLAYER_INACTIVE_TIMEOUT);
   }
 }
